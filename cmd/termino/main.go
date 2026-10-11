@@ -3,8 +3,16 @@
 // sub-commands, dependency injection, and startup logic.
 package main
 
-import "github.com/lesquel/termino/internal/cli"
+import (
+	"fmt"
+	"os"
+
+	"github.com/lesquel/termino/internal/cli"
+)
 
 func main() {
-	cli.Execute()
+	if err := cli.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

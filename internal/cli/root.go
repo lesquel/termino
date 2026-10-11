@@ -1,6 +1,4 @@
 // Package cli wires the Cobra command tree for the termino binary.
-// The full command tree is implemented in FEAT-003; this stub ensures
-// `go build ./...` succeeds from the first commit.
 package cli
 
 import (
@@ -13,16 +11,37 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "termino",
 	Short: "Termino — local task board with TUI and MCP server",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("termino: not yet implemented")
-		return nil
-	},
+	Long: `Termino is a local-first task board that runs entirely on your machine.
+It stores data in SQLite and exposes a TUI, MCP server, and CLI.`,
 }
 
 // Execute is the entry point called by main.go.
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+// It returns an error so the caller can set the exit code.
+func Execute() error {
+	return rootCmd.Execute()
+}
+
+func init() {
+	rootCmd.AddCommand(
+		newProjectCmd(),
+		newTaskCmd(),
+		newBoardCmd(),
+		newWidgetCmd(),
+		newMCPCmd(),
+		newImportCmd(),
+		newConnectCmd(),
+		newSetupCmd(),
+		newUninstallCmd(),
+		newDoctorCmd(),
+		newThemeCmd(),
+	)
+	// Suppress Cobra's default "Error:" prefix — our commands handle their own output.
+	rootCmd.SilenceErrors = true
+	rootCmd.SilenceUsage = true
+}
+
+// fatalErr prints an error message to stderr and exits with code 1.
+func fatalErr(err error) {
+	fmt.Fprintln(os.Stderr, "Error:", err)
+	os.Exit(1)
 }
