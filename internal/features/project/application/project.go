@@ -1,0 +1,134 @@
+// Package application contains the project feature use cases.
+// It imports only domain packages and the Go standard library.
+package application
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"regexp"
+	"time"
+
+	"github.com/google/uuid"
+	sharedomain "github.com/lesquel/termino/internal/domain"
+	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
+	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
+	"github.com/lesquel/termino/internal/platform/events"
+)
+
+// Actor is a type alias so callers can use the application package directly.
+type Actor = sharedomain.Actor
+
+// ErrDuplicateKey is returned when a project with the same key already exists.
+var ErrDuplicateKey = errors.New("project key already in use")
+
+// ErrInvalidKey is returned when the project key does not match the required format.
+var ErrInvalidKey = errors.New("project key must be 2-5 uppercase letters")
+
+var keyRegexp = regexp.MustCompile(`^[A-Z]{2,5}$`)
+
+// ProjectCreated is published after a project is created.
+type ProjectCreated struct {
+	ProjectID string
+	Key       string
+}
+
+// Type implements events.Event.
+func (e ProjectCreated) Type() string { return "project.created" }
+
+// CreateProjectInput is the input DTO for the CreateProject use case.
+type CreateProjectInput struct {
+	Key         string
+	Name        string
+	Methodology projectdomain.MethodologyKind
+}
+
+// ProjectUseCases groups all project-related use cases.
+type ProjectUseCases struct {
+	projects projectdomain.ProjectRepository
+	board    boarddomain.BoardRepository
+	bus      *events.Bus
+}
+
+// NewProjectUseCases constructs a ProjectUseCases instance.
+func NewProjectUseCases(
+	projects projectdomain.ProjectRepository,
+	board boarddomain.BoardRepository,
+	bus *events.Bus,
+) *ProjectUseCases {
+	return &ProjectUseCases{projects: projects, board: board, bus: bus}
+}
+
+// CreateProject validates the input, generates a UUID, saves the project, creates
+// default columns from the methodology, and publishes ProjectCreated.
+func (uc *ProjectUseCases) CreateProject(
+	ctx context.Context,
+	actor Actor,
+	input CreateProjectInput,
+) (projectdomain.Project, error) {
+	if !keyRegexp.MatchString(input.Key) {
+		return projectdomain.Project{}, ErrInvalidKey
+	}
+	if _, err := uc.projects.FindByKey(ctx, input.Key); err == nil {
+		return projectdomain.Project{}, fmt.Errorf("%w: %s", ErrDuplicateKey, input.Key)
+	}
+	if input.Methodology == "" {
+		input.Methodology = projectdomain.MethodologyKanban
+	}
+
+	p := projectdomain.Project{
+		ID:          uuid.NewString(),
+		Key:         input.Key,
+		Name:        input.Name,
+		Methodology: input.Methodology,
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := uc.projects.Save(ctx, p); err != nil {
+		return projectdomain.Project{}, fmt.Errorf("save project: %w", err)
+	}
+
+	method := projectdomain.MethodologyFor(input.Methodology)
+	for _, tpl := range method.DefaultColumns() {
+		col := boarddomain.Column{
+			ID:        uuid.NewString(),
+			ProjectID: p.ID,
+			Name:      tpl.Name,
+			Position:  tpl.Position,
+		}
+		if err := uc.board.SaveColumn(ctx, col); err != nil {
+			return projectdomain.Project{}, fmt.Errorf("save column %q: %w", tpl.Name, err)
+		}
+	}
+
+	uc.bus.Publish(ctx, ProjectCreated{ProjectID: p.ID, Key: p.Key})
+	return p, nil
+}
+
+// ListProjects returns all non-archived projects.
+func (uc *ProjectUseCases) ListProjects(ctx context.Context) ([]projectdomain.Project, error) {
+	return uc.projects.List(ctx)
+}
+
+// ChangeMethodology updates the methodology of a project.
+func (uc *ProjectUseCases) ChangeMethodology(
+	ctx context.Context,
+	actor Actor,
+	projectID string,
+	kind projectdomain.MethodologyKind,
+) error {
+	p, err := uc.projects.FindByID(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("find project: %w", err)
+	}
+	p.Methodology = kind
+	return uc.projects.Save(ctx, p)
+}
+
+// ArchiveProject marks a project as archived.
+func (uc *ProjectUseCases) ArchiveProject(
+	ctx context.Context,
+	actor Actor,
+	projectID string,
+) error {
+	return uc.projects.Archive(ctx, projectID, time.Now().UTC())
+}

@@ -1,0 +1,355 @@
+// Package application contains the task feature use cases.
+// It imports only domain packages and the Go standard library.
+package application
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	sharedomain "github.com/lesquel/termino/internal/domain"
+	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
+	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/events"
+)
+
+// Actor is a type alias so callers can use the application package directly.
+type Actor = sharedomain.Actor
+
+// ErrConfirmRequired is returned by DeleteTask when confirm is false.
+var ErrConfirmRequired = errors.New("deletion requires explicit confirmation")
+
+// TaskMoved is published after a task changes columns.
+type TaskMoved struct {
+	TaskID         string
+	FromColumnID   string
+	ToColumnID     string
+}
+
+// Type implements events.Event.
+func (e TaskMoved) Type() string { return "task.moved" }
+
+// TaskAssigned is published after a task's assignee changes.
+type TaskAssigned struct {
+	TaskID     string
+	AssigneeID *string
+}
+
+// Type implements events.Event.
+func (e TaskAssigned) Type() string { return "task.assigned" }
+
+// CreateTaskInput is the input DTO for the CreateTask use case.
+type CreateTaskInput struct {
+	ProjectID   string
+	Title       string
+	Description string
+	ColumnID    string
+	SprintID    *string
+	Priority    taskdomain.Priority
+	AssigneeID  *string
+	DueDate     *time.Time
+	Points      *int
+	Source      *string
+	SourcePath  *string
+	SourceRef   *string
+}
+
+// UpdateTaskInput is the input DTO for the UpdateTask use case.
+type UpdateTaskInput struct {
+	TaskID      string
+	Title       *string
+	Description *string
+	Priority    *taskdomain.Priority
+	DueDate     *time.Time
+	Points      *int
+}
+
+// TaskUseCases groups all task-related use cases.
+type TaskUseCases struct {
+	tasks      taskdomain.TaskRepository
+	comments   taskdomain.CommentRepository
+	activities taskdomain.ActivityRepository
+	board      boarddomain.BoardRepository
+	bus        *events.Bus
+}
+
+// NewTaskUseCases constructs a TaskUseCases instance.
+func NewTaskUseCases(
+	tasks taskdomain.TaskRepository,
+	comments taskdomain.CommentRepository,
+	activities taskdomain.ActivityRepository,
+	board boarddomain.BoardRepository,
+	bus *events.Bus,
+) *TaskUseCases {
+	return &TaskUseCases{
+		tasks:      tasks,
+		comments:   comments,
+		activities: activities,
+		board:      board,
+		bus:        bus,
+	}
+}
+
+// CreateTask assigns the next number, sets the fractional position at the end
+// of the target column, saves the task, and records a 'created' activity.
+func (uc *TaskUseCases) CreateTask(
+	ctx context.Context,
+	actor Actor,
+	input CreateTaskInput,
+) (taskdomain.Task, error) {
+	num, err := uc.tasks.NextNumber(ctx, input.ProjectID)
+	if err != nil {
+		return taskdomain.Task{}, fmt.Errorf("next number: %w", err)
+	}
+	existing, err := uc.tasks.List(ctx, taskdomain.TaskFilter{ColumnID: input.ColumnID})
+	if err != nil {
+		return taskdomain.Task{}, fmt.Errorf("list tasks: %w", err)
+	}
+	position := float64(len(existing) + 1)
+
+	t := taskdomain.Task{
+		ID:          uuid.NewString(),
+		ProjectID:   input.ProjectID,
+		Number:      num,
+		Title:       input.Title,
+		Description: input.Description,
+		ColumnID:    input.ColumnID,
+		SprintID:    input.SprintID,
+		Priority:    input.Priority,
+		AssigneeID:  input.AssigneeID,
+		DueDate:     input.DueDate,
+		Points:      input.Points,
+		Position:    position,
+		Source:      input.Source,
+		SourcePath:  input.SourcePath,
+		SourceRef:   input.SourceRef,
+	}
+	if t.Priority == "" {
+		t.Priority = taskdomain.PriorityMedium
+	}
+	if err := uc.tasks.Save(ctx, t); err != nil {
+		return taskdomain.Task{}, fmt.Errorf("save task: %w", err)
+	}
+	if err := uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "created", map[string]any{
+		"title": t.Title,
+	}); err != nil {
+		return taskdomain.Task{}, err
+	}
+	return t, nil
+}
+
+// UpdateTask applies optional field changes and records a 'updated' activity.
+func (uc *TaskUseCases) UpdateTask(
+	ctx context.Context,
+	actor Actor,
+	input UpdateTaskInput,
+) error {
+	t, err := uc.tasks.FindByID(ctx, input.TaskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	changed := map[string]any{}
+	if input.Title != nil && *input.Title != t.Title {
+		changed["title"] = map[string]any{"from": t.Title, "to": *input.Title}
+		t.Title = *input.Title
+	}
+	if input.Description != nil && *input.Description != t.Description {
+		changed["description"] = map[string]any{"from": t.Description, "to": *input.Description}
+		t.Description = *input.Description
+	}
+	if input.Priority != nil && *input.Priority != t.Priority {
+		changed["priority"] = map[string]any{"from": t.Priority, "to": *input.Priority}
+		t.Priority = *input.Priority
+	}
+	if input.DueDate != t.DueDate {
+		changed["dueDate"] = map[string]any{"from": t.DueDate, "to": input.DueDate}
+		t.DueDate = input.DueDate
+	}
+	if input.Points != t.Points {
+		changed["points"] = map[string]any{"from": t.Points, "to": input.Points}
+		t.Points = input.Points
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	if err := uc.tasks.Save(ctx, t); err != nil {
+		return fmt.Errorf("save task: %w", err)
+	}
+	return uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "updated", changed)
+}
+
+// MoveTask relocates a task to a different column at the given fractional position.
+// It checks the WIP limit of the target column and records a 'moved' activity.
+func (uc *TaskUseCases) MoveTask(
+	ctx context.Context,
+	actor Actor,
+	taskID, targetColumnID string,
+	position float64,
+) error {
+	t, err := uc.tasks.FindByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	col, err := uc.board.FindColumnByID(ctx, targetColumnID)
+	if err != nil {
+		return fmt.Errorf("find column: %w", err)
+	}
+	// Build a minimal board to check WIP.
+	existingTasks, err := uc.tasks.List(ctx, taskdomain.TaskFilter{ColumnID: targetColumnID})
+	if err != nil {
+		return fmt.Errorf("list column tasks: %w", err)
+	}
+	taskIDs := make([]string, 0, len(existingTasks))
+	for _, et := range existingTasks {
+		if et.ID != taskID { // exclude the task being moved
+			taskIDs = append(taskIDs, et.ID)
+		}
+	}
+	board := boarddomain.Board{
+		Tasks: map[string][]string{targetColumnID: taskIDs},
+	}
+	if err := boarddomain.CanAddToColumn(board, col); err != nil {
+		return err
+	}
+
+	fromColumnID := t.ColumnID
+	t.ColumnID = targetColumnID
+	t.Position = position
+	if err := uc.tasks.Save(ctx, t); err != nil {
+		return fmt.Errorf("save task: %w", err)
+	}
+	if err := uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "moved", map[string]any{
+		"from": fromColumnID,
+		"to":   targetColumnID,
+	}); err != nil {
+		return err
+	}
+	uc.bus.Publish(ctx, TaskMoved{TaskID: taskID, FromColumnID: fromColumnID, ToColumnID: targetColumnID})
+	return nil
+}
+
+// AssignTask sets or clears the assignee of a task and records an 'assigned' activity.
+func (uc *TaskUseCases) AssignTask(
+	ctx context.Context,
+	actor Actor,
+	taskID string,
+	assigneeID *string,
+) error {
+	t, err := uc.tasks.FindByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	t.AssigneeID = assigneeID
+	if err := uc.tasks.Save(ctx, t); err != nil {
+		return fmt.Errorf("save task: %w", err)
+	}
+	if err := uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "assigned", map[string]any{
+		"assigneeId": assigneeID,
+	}); err != nil {
+		return err
+	}
+	uc.bus.Publish(ctx, TaskAssigned{TaskID: taskID, AssigneeID: assigneeID})
+	return nil
+}
+
+// AddComment attaches a comment to a task.
+func (uc *TaskUseCases) AddComment(
+	ctx context.Context,
+	actor Actor,
+	taskID, body string,
+) (taskdomain.Comment, error) {
+	if _, err := uc.tasks.FindByID(ctx, taskID); err != nil {
+		return taskdomain.Comment{}, fmt.Errorf("find task: %w", err)
+	}
+	c := taskdomain.Comment{
+		ID:        uuid.NewString(),
+		TaskID:    taskID,
+		AuthorID:  actor.ID,
+		Body:      body,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := uc.comments.Save(ctx, c); err != nil {
+		return taskdomain.Comment{}, fmt.Errorf("save comment: %w", err)
+	}
+	return c, nil
+}
+
+// DeleteTask soft-deletes a task. Requires confirm==true.
+func (uc *TaskUseCases) DeleteTask(
+	ctx context.Context,
+	actor Actor,
+	taskID string,
+	confirm bool,
+) error {
+	if !confirm {
+		return ErrConfirmRequired
+	}
+	t, err := uc.tasks.FindByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	now := time.Now().UTC()
+	if err := uc.tasks.SoftDelete(ctx, taskID, now); err != nil {
+		return fmt.Errorf("soft delete: %w", err)
+	}
+	return uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "deleted", map[string]any{})
+}
+
+// RestoreTask clears the DeletedAt field on a soft-deleted task.
+func (uc *TaskUseCases) RestoreTask(
+	ctx context.Context,
+	actor Actor,
+	taskID string,
+) error {
+	t, err := uc.tasks.FindByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	if err := uc.tasks.Restore(ctx, taskID); err != nil {
+		return fmt.Errorf("restore: %w", err)
+	}
+	return uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "restored", map[string]any{})
+}
+
+// ListTasks returns tasks matching the given filter.
+func (uc *TaskUseCases) ListTasks(
+	ctx context.Context,
+	filter taskdomain.TaskFilter,
+) ([]taskdomain.Task, error) {
+	return uc.tasks.List(ctx, filter)
+}
+
+// MyTasks returns all non-deleted tasks assigned to the given actor.
+func (uc *TaskUseCases) MyTasks(ctx context.Context, actorID string) ([]taskdomain.Task, error) {
+	return uc.tasks.List(ctx, taskdomain.TaskFilter{AssigneeID: actorID})
+}
+
+// appendActivity builds and persists an Activity entry.
+func (uc *TaskUseCases) appendActivity(
+	ctx context.Context,
+	actor Actor,
+	taskID, projectID, action string,
+	payload map[string]any,
+) error {
+	// Ensure payload is JSON-round-trippable by marshaling and back.
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal activity payload: %w", err)
+	}
+	var p map[string]any
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return fmt.Errorf("unmarshal activity payload: %w", err)
+	}
+	a := taskdomain.Activity{
+		ID:        uuid.NewString(),
+		TaskID:    taskID,
+		ActorID:   actor.ID,
+		Action:    action,
+		Payload:   p,
+		CreatedAt: time.Now().UTC(),
+	}
+	return uc.activities.Append(ctx, a)
+}
