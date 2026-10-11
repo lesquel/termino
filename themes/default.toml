@@ -1,16 +1,16 @@
 # Termino default theme
 
 [colors]
-surface     = "#1E1E2E"
-surface_alt = "#181825"
-text        = "#CDD6F4"
-text_muted  = "#585B70"
-accent      = "#89B4FA"
-success     = "#A6E3A1"
-warning     = "#F9E2AF"
-danger      = "#F38BA8"
-border      = "#313244"
-done        = "#6C7086"
+surface     = "#1a1a2e"
+surface_alt = "#16213e"
+text        = "#e0e0e0"
+text_muted  = "#6b7280"
+accent      = "#7c3aed"
+success     = "#22c55e"
+warning     = "#f59e0b"
+danger      = "#ef4444"
+border      = "#374151"
+done        = "#6b7280"
 
 [symbols]
 done     = "✓"
@@ -21,3 +21,4 @@ low      = "▼"
 
 [options]
 border_style = "rounded"
+motion       = true

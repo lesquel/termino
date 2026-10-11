@@ -1,0 +1,4 @@
+Termino (TER)
+  TER-1  Implement widget renderers
+  TER-2  Write tests for adapters
+  TER-3  Fix the polling bug in the board

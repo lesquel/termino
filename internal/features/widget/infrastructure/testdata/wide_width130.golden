@@ -1,0 +1,6 @@
+Termino (TER)
+  REF         TITLE                                     DUE           COLUMN
+  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  TER-1       Implement widget renderers                —             In Progress
+  TER-2       Write tests for adapters                  overdue       Backlog
+  TER-3       Fix the polling bug in the board          —             In Progress

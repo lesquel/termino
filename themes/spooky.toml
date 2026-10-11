@@ -1,16 +1,21 @@
-# Termino spooky theme — dark purple palette with orange accent
+# Termino spooky theme — dark horror palette with orange accent
+#
+#   ( )   ( )   ( )
+#  (   ) (   ) (   )
+#   |_|   |_|   |_|
+#   |_|   |_|   |_|  👻  BOO!
 
 [colors]
-surface     = "#1A0A2E"
-surface_alt = "#120720"
-text        = "#E8D5FF"
-text_muted  = "#5A4570"
-accent      = "#FF6B00"
-success     = "#39FF14"
-warning     = "#FFD700"
-danger      = "#FF3131"
-border      = "#3D1F6E"
-done        = "#5A4570"
+surface     = "#0d0d1a"
+surface_alt = "#0a0a14"
+text        = "#f0e6ff"
+text_muted  = "#5a4570"
+accent      = "#ff6b00"
+success     = "#7fff00"
+warning     = "#ff6b00"
+danger      = "#ff0040"
+border      = "#3d1f6e"
+done        = "#5a4570"
 
 [symbols]
 done     = "👻"
@@ -20,4 +25,16 @@ medium   = "🕷"
 low      = "🌙"
 
 [options]
-border_style = "rounded"
+border_style = "double"
+motion       = true
+
+[celebration]
+ascii_art = """
+  .-""""""-.
+ /          \\
+|  O      O  |
+|    ----    |
+ \\          /
+  '--------'
+   👻 BOO! 👻
+"""

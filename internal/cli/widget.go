@@ -1,10 +1,30 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
+	xterm "github.com/charmbracelet/x/term"
+	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
+	widgetdomain "github.com/lesquel/termino/internal/features/widget/domain"
+	widgetinfra "github.com/lesquel/termino/internal/features/widget/infrastructure"
+	"github.com/lesquel/termino/internal/platform/config"
+	"github.com/lesquel/termino/internal/platform/logging"
 	"github.com/spf13/cobra"
+)
+
+const (
+	widgetMarker    = "termino-widget-start"
+	widgetMarkerEnd = "termino-widget-end"
+	widgetBlock     = "# --- termino-widget-start ---\n" +
+		"if command -v termino &>/dev/null; then termino widget; fi\n" +
+		"# --- termino-widget-end ---\n"
 )
 
 // newWidgetCmd returns `termino widget` and its subcommands.
@@ -12,54 +32,259 @@ func newWidgetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "widget",
 		Short: "Display the status-bar widget summary",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := globalContainer.Config()
-			if err != nil {
-				return err
-			}
-			if cfg.CurrentProjectID == "" {
-				return fmt.Errorf("no current project set — run `termino project new` first")
-			}
-
-			uc, err := globalContainer.WidgetUseCases()
-			if err != nil {
-				return err
-			}
-			summary, err := uc.GetSummary(context.Background(), cfg.CurrentProjectID, "cli", "")
-			if err != nil {
-				return fmt.Errorf("get summary: %w", err)
-			}
-
-			fmt.Printf("%s (%s)\n", summary.ProjectName, summary.ProjectKey)
-			fmt.Printf("  Assigned:    %d\n", len(summary.AssignedTasks))
-			fmt.Printf("  In Progress: %d\n", len(summary.InProgressTasks))
-			fmt.Printf("  Due Soon:    %d\n", len(summary.DueSoonTasks))
-			return nil
-		},
+		RunE:  runWidget,
 	}
-
 	cmd.AddCommand(newWidgetInstallCmd(), newWidgetUninstallCmd())
 	return cmd
+}
+
+func runWidget(cmd *cobra.Command, args []string) error {
+	// Ensure logging goes to file, never stdout/stderr (would corrupt widget output).
+	logPath := filepath.Join(config.StateDir(), "termino.log")
+	_ = logging.Init(logPath)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := renderWidget(); err != nil {
+			slog.Error("widget render error", "err", err)
+		}
+	}()
+
+	select {
+	case <-done:
+		// completed in time
+	case <-time.After(100 * time.Millisecond):
+		slog.Warn("widget timed out after 100ms")
+		os.Exit(0)
+	}
+	return nil
+}
+
+func renderWidget() error {
+	cfg, err := globalContainer.Config()
+	if err != nil {
+		return err
+	}
+	if cfg.CurrentProjectID == "" {
+		return fmt.Errorf("no current project set — run `termino project new` first")
+	}
+
+	uc, err := globalContainer.WidgetUseCases()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Millisecond)
+	defer cancel()
+
+	summary, err := uc.GetSummary(ctx, cfg.CurrentProjectID, "cli", "")
+	if err != nil {
+		return fmt.Errorf("get summary: %w", err)
+	}
+
+	width, _, err := xterm.GetSize(uintptr(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		width = 80
+	}
+
+	var renderer widgetdomain.Renderer
+
+	// Select renderer based on terminal width.
+	if width < 60 {
+		renderer = widgetinfra.NewCompactRenderer()
+	} else if width <= 120 {
+		renderer = widgetinfra.NewNormalRenderer()
+	} else {
+		renderer = widgetinfra.NewWideRenderer()
+	}
+
+	out, err := renderer.Render(summary, width)
+	if err != nil {
+		return fmt.Errorf("render: %w", err)
+	}
+	fmt.Println(out)
+	return nil
 }
 
 func newWidgetInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",
-		Short: "Install the tmux/shell widget — coming soon",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Widget install coming in a future release (FEAT-005).")
-			return nil
-		},
+		Short: "Install the widget block into ~/.bashrc or ~/.zshrc",
+		RunE:  runWidgetInstall,
 	}
+}
+
+func runWidgetInstall(cmd *cobra.Command, args []string) error {
+	rcPath, err := detectShellRC()
+	if err != nil {
+		return err
+	}
+
+	// Backup the rc file.
+	if err := backupFile(rcPath); err != nil {
+		return fmt.Errorf("backup %s: %w", rcPath, err)
+	}
+
+	// Check if block is already present.
+	content, err := os.ReadFile(rcPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", rcPath, err)
+	}
+	if strings.Contains(string(content), widgetMarker) {
+		fmt.Printf("Widget block already present in %s\n", rcPath)
+		return nil
+	}
+
+	// Append the block.
+	f, err := os.OpenFile(rcPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", rcPath, err)
+	}
+	if _, err := f.WriteString("\n" + widgetBlock); err != nil {
+		f.Close()
+		return fmt.Errorf("write widget block: %w", err)
+	}
+	f.Close()
+
+	// Record in InstallationRegistry.
+	reg, err := loadRegistry()
+	if err != nil {
+		return err
+	}
+	if err := reg.Record(setupdomain.InstalledItem{
+		Kind:   "block",
+		Path:   rcPath,
+		Marker: widgetMarker,
+	}); err != nil {
+		return fmt.Errorf("record widget install: %w", err)
+	}
+
+	fmt.Printf("✓ Widget block added to %s\n", rcPath)
+	fmt.Println("  Restart your shell or run: source", rcPath)
+	return nil
 }
 
 func newWidgetUninstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "uninstall",
-		Short: "Uninstall the tmux/shell widget — coming soon",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Widget uninstall coming in a future release (FEAT-005).")
-			return nil
-		},
+		Short: "Remove the widget block from the shell rc file",
+		RunE:  runWidgetUninstall,
 	}
+}
+
+func runWidgetUninstall(cmd *cobra.Command, args []string) error {
+	reg, err := loadRegistry()
+	if err != nil {
+		return err
+	}
+
+	items, err := reg.List()
+	if err != nil {
+		return err
+	}
+
+	var found *setupdomain.InstalledItem
+	for i, item := range items {
+		if item.Kind == "block" && item.Marker == widgetMarker {
+			found = &items[i]
+			break
+		}
+	}
+	if found == nil {
+		fmt.Println("No widget block found in registry.")
+		return nil
+	}
+
+	if err := removeBlockFromFile(found.Path, widgetMarker, widgetMarkerEnd); err != nil {
+		return fmt.Errorf("remove block from %s: %w", found.Path, err)
+	}
+
+	if err := reg.Remove(*found); err != nil {
+		return fmt.Errorf("update registry: %w", err)
+	}
+
+	fmt.Printf("✓ Widget block removed from %s\n", found.Path)
+	return nil
+}
+
+// detectShellRC returns the path to the shell rc file based on $SHELL.
+func detectShellRC() (string, error) {
+	shell := os.Getenv("SHELL")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get home dir: %w", err)
+	}
+	switch {
+	case strings.Contains(shell, "zsh"):
+		return filepath.Join(home, ".zshrc"), nil
+	case strings.Contains(shell, "bash"):
+		return filepath.Join(home, ".bashrc"), nil
+	default:
+		// Default to bash.
+		return filepath.Join(home, ".bashrc"), nil
+	}
+}
+
+// backupFile copies src to src + ".termino-bak".
+func backupFile(src string) error {
+	data, err := os.ReadFile(src)
+	if os.IsNotExist(err) {
+		return nil // nothing to back up
+	}
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(src+".termino-bak", data, 0600)
+}
+
+// removeBlockFromFile removes lines between the start and end markers (inclusive).
+func removeBlockFromFile(path, startMarker, endMarker string) error {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	inside := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, startMarker) {
+			inside = true
+			continue
+		}
+		if strings.Contains(line, endMarker) {
+			inside = false
+			continue
+		}
+		if !inside {
+			lines = append(lines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	f.Close()
+
+	// Remove trailing blank lines that the block left behind.
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+}
+
+// loadRegistry returns the loaded InstallationRegistry from the state dir.
+func loadRegistry() (*setupdomain.InstallationRegistry, error) {
+	registryPath := filepath.Join(config.StateDir(), "installed.json")
+	reg := setupdomain.NewInstallationRegistry(registryPath)
+	if err := reg.Load(); err != nil {
+		return nil, fmt.Errorf("load registry: %w", err)
+	}
+	return reg, nil
 }
