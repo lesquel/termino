@@ -327,6 +327,26 @@ func (uc *TaskUseCases) MyTasks(ctx context.Context, actorID string) ([]taskdoma
 	return uc.tasks.List(ctx, taskdomain.TaskFilter{AssigneeID: actorID})
 }
 
+// ListRecentActivity returns the most recent limit Activity entries for a project.
+func (uc *TaskUseCases) ListRecentActivity(ctx context.Context, projectID string, limit int) ([]taskdomain.Activity, error) {
+	return uc.activities.ListRecent(ctx, projectID, limit)
+}
+
+// FindTaskByID retrieves a single task by ID.
+func (uc *TaskUseCases) FindTaskByID(ctx context.Context, taskID string) (taskdomain.Task, error) {
+	return uc.tasks.FindByID(ctx, taskID)
+}
+
+// ListCommentsByTask returns all comments for a task.
+func (uc *TaskUseCases) ListCommentsByTask(ctx context.Context, taskID string) ([]taskdomain.Comment, error) {
+	return uc.comments.ListByTask(ctx, taskID)
+}
+
+// ListActivityByTask returns all activity entries for a task.
+func (uc *TaskUseCases) ListActivityByTask(ctx context.Context, taskID string) ([]taskdomain.Activity, error) {
+	return uc.activities.ListByTask(ctx, taskID)
+}
+
 // appendActivity builds and persists an Activity entry.
 func (uc *TaskUseCases) appendActivity(
 	ctx context.Context,

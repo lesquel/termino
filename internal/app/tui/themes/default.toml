@@ -1,0 +1,23 @@
+# Termino default theme
+
+[colors]
+surface     = "#1E1E2E"
+surface_alt = "#181825"
+text        = "#CDD6F4"
+text_muted  = "#585B70"
+accent      = "#89B4FA"
+success     = "#A6E3A1"
+warning     = "#F9E2AF"
+danger      = "#F38BA8"
+border      = "#313244"
+done        = "#6C7086"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "rounded"

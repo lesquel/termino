@@ -13,6 +13,10 @@ var rootCmd = &cobra.Command{
 	Short: "Termino — local task board with TUI and MCP server",
 	Long: `Termino is a local-first task board that runs entirely on your machine.
 It stores data in SQLite and exposes a TUI, MCP server, and CLI.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Running `termino` with no subcommand opens the TUI.
+		return startTUI()
+	},
 }
 
 // Execute is the entry point called by main.go.
