@@ -7,7 +7,9 @@ import (
 	"time"
 )
 
-// Priority represents the urgency level of a task.
+// Priority represents the urgency level of a task. It is a closed enum: only
+// the constants below are valid. Edge handlers (MCP/CLI) must validate a
+// Priority before persisting it (TRD security 11.3 — closed-enum validation).
 type Priority string
 
 const (
@@ -16,6 +18,17 @@ const (
 	PriorityHigh     Priority = "high"
 	PriorityCritical Priority = "critical"
 )
+
+// Valid reports whether p is one of the defined priority constants. The empty
+// string is NOT valid; callers that accept an optional priority should treat
+// "" as "use the default" before calling the use case, not as a priority.
+func (p Priority) Valid() bool {
+	switch p {
+	case PriorityLow, PriorityMedium, PriorityHigh, PriorityCritical:
+		return true
+	}
+	return false
+}
 
 // Task is the central aggregate of the application.
 type Task struct {

@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -29,9 +31,11 @@ func newProjectCmd() *cobra.Command {
 // newProjectNewCmd returns `termino project new`.
 func newProjectNewCmd() *cobra.Command {
 	var (
-		name        string
-		key         string
-		methodology string
+		name          string
+		key           string
+		methodology   string
+		path          string
+		associatePwd  bool
 	)
 
 	cmd := &cobra.Command{
@@ -64,6 +68,20 @@ func newProjectNewCmd() *cobra.Command {
 				}
 			}
 
+			// Resolve the associated path: an explicit --path wins, otherwise
+			// --associate-pwd uses the current working directory.
+			associatedPath := strings.TrimSpace(path)
+			if associatePwd && associatedPath == "" {
+				pwd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get working directory: %w", err)
+				}
+				associatedPath = pwd
+			}
+			if associatedPath != "" {
+				associatedPath = filepath.Clean(associatedPath)
+			}
+
 			uc, err := globalContainer.ProjectUseCases()
 			if err != nil {
 				return err
@@ -71,9 +89,10 @@ func newProjectNewCmd() *cobra.Command {
 
 			actor := sharedomain.Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
 			p, err := uc.CreateProject(context.Background(), actor, projectapp.CreateProjectInput{
-				Key:         key,
-				Name:        name,
-				Methodology: mKind,
+				Key:            key,
+				Name:           name,
+				Methodology:    mKind,
+				AssociatedPath: associatedPath,
 			})
 			if err != nil {
 				return fmt.Errorf("create project: %w", err)
@@ -91,6 +110,9 @@ func newProjectNewCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Created project %s (%s)\n", p.Key, p.Name)
+			if p.AssociatedPath != "" {
+				fmt.Printf("  Associated path: %s (widget will auto-detect it here)\n", p.AssociatedPath)
+			}
 			return nil
 		},
 	}
@@ -98,6 +120,8 @@ func newProjectNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Project name")
 	cmd.Flags().StringVar(&key, "key", "", "Project key (2-5 uppercase letters)")
 	cmd.Flags().StringVar(&methodology, "methodology", "kanban", "Methodology: kanban or scrum")
+	cmd.Flags().StringVar(&path, "path", "", "Associate this project with a filesystem path (for widget CWD detection)")
+	cmd.Flags().BoolVar(&associatePwd, "associate-pwd", false, "Associate this project with the current working directory ($PWD)")
 	return cmd
 }
 

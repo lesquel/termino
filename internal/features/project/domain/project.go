@@ -61,12 +61,13 @@ type Methodology interface {
 
 // Project is the root aggregate for a workspace project.
 type Project struct {
-	ID           string
-	Key          string // 2-5 uppercase letters, unique per workspace
-	Name         string
-	Methodology  MethodologyKind
-	CreatedAt    time.Time
-	ArchivedAt   *time.Time
+	ID             string
+	Key            string // 2-5 uppercase letters, unique per workspace
+	Name           string
+	Methodology    MethodologyKind
+	AssociatedPath string // filesystem path the widget uses to auto-detect this project (CWD); "" when unset
+	CreatedAt      time.Time
+	ArchivedAt     *time.Time
 }
 
 // ProjectRepository defines the persistence contract for Project aggregates.

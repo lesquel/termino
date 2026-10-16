@@ -21,19 +21,25 @@ func NewPathDetector(db *sql.DB) *PathDetector {
 }
 
 // DetectForPath returns the project ID whose associated_path is the longest
-// prefix of fsPath. Returns an empty string (no error) when no match exists.
+// path-segment prefix of fsPath. Returns an empty string (no error) when no
+// match exists.
+//
+// The match is a true path-prefix, not a raw string prefix: "/home/a" only
+// matches fsPath "/home/a" or a descendant such as "/home/a/sub", never
+// "/home/abc". The stored associated_path is normalised by stripping trailing
+// slashes so a path stored with a trailing slash still matches its
+// descendants.
 func (d *PathDetector) DetectForPath(fsPath string) (string, error) {
-	// Use parameterized LIKE to find rows where associated_path is a prefix.
-	// We append '%' to the path as the wildcard; the rows are ordered longest
-	// first so that the most-specific path wins.
+	// Bind fsPath twice: once for the exact match, once for the descendant
+	// match. Rows are ordered longest first so the most-specific path wins.
 	row := d.db.QueryRow(`
 		SELECT id
 		FROM   projects
 		WHERE  archived_at IS NULL
 		  AND  associated_path IS NOT NULL
-		  AND  ? LIKE (associated_path || '%')
+		  AND  (? = rtrim(associated_path, '/') OR ? LIKE (rtrim(associated_path, '/') || '/%'))
 		ORDER  BY length(associated_path) DESC
-		LIMIT  1`, fsPath)
+		LIMIT  1`, fsPath, fsPath)
 
 	var id string
 	err := row.Scan(&id)

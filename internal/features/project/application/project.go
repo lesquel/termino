@@ -38,9 +38,10 @@ func (e ProjectCreated) Type() string { return "project.created" }
 
 // CreateProjectInput is the input DTO for the CreateProject use case.
 type CreateProjectInput struct {
-	Key         string
-	Name        string
-	Methodology projectdomain.MethodologyKind
+	Key            string
+	Name           string
+	Methodology    projectdomain.MethodologyKind
+	AssociatedPath string // optional CWD the widget uses to auto-detect this project
 }
 
 // ProjectUseCases groups all project-related use cases.
@@ -77,11 +78,12 @@ func (uc *ProjectUseCases) CreateProject(
 	}
 
 	p := projectdomain.Project{
-		ID:          uuid.NewString(),
-		Key:         input.Key,
-		Name:        input.Name,
-		Methodology: input.Methodology,
-		CreatedAt:   time.Now().UTC(),
+		ID:             uuid.NewString(),
+		Key:            input.Key,
+		Name:           input.Name,
+		Methodology:    input.Methodology,
+		AssociatedPath: input.AssociatedPath,
+		CreatedAt:      time.Now().UTC(),
 	}
 	if err := uc.projects.Save(ctx, p); err != nil {
 		return projectdomain.Project{}, fmt.Errorf("save project: %w", err)
