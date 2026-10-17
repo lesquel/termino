@@ -44,7 +44,15 @@ func cleanName(what, raw string) (string, error) {
 
 // errNoCurrentProject is returned when neither the working directory nor the
 // config names a project.
-var errNoCurrentProject = errors.New("no current project set — run `termino project new` first")
+var errNoCurrentProject = errors.New("no project yet — run `termino setup` to create one (or `termino project use <key>` to pick one)")
+
+// oneOf formats the valid values of a not-found error: " — valid: a, b".
+func oneOf(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return " — valid: " + strings.Join(sanitizeAll(values), ", ")
+}
 
 // currentProjectID returns the project commands act on: the project
 // associated with the working directory (longest path prefix) wins, the
@@ -115,12 +123,14 @@ func projectByKey(ctx context.Context, key string) (projectdomain.Project, error
 	if err != nil {
 		return projectdomain.Project{}, fmt.Errorf("list projects: %w", err)
 	}
+	keys := make([]string, 0, len(projects))
 	for _, p := range projects {
 		if strings.EqualFold(p.Key, key) {
 			return p, nil
 		}
+		keys = append(keys, p.Key)
 	}
-	return projectdomain.Project{}, fmt.Errorf("no project with key %q", key)
+	return projectdomain.Project{}, fmt.Errorf("no project with key %q%s", sanitize.Line(key), oneOf(keys))
 }
 
 // resolveTask finds a task by reference: "KEY-N" (any project), "N" or "#N"
@@ -131,7 +141,7 @@ func resolveTask(ctx context.Context, ref string) (taskdomain.Task, error) {
 		return taskdomain.Task{}, err
 	}
 	ref = strings.TrimSpace(ref)
-	notFound := fmt.Errorf("task %q not found", sanitize.Line(ref))
+	notFound := fmt.Errorf("task %q not found — see `termino task list`", sanitize.Line(ref))
 
 	if n, err := strconv.Atoi(strings.TrimPrefix(ref, "#")); err == nil {
 		projectID, err := currentProjectID()
@@ -180,12 +190,14 @@ func resolveBoardColumn(ctx context.Context, projectID, ref string) (boarddomain
 			return c, board.Columns, nil
 		}
 	}
+	names := make([]string, 0, len(board.Columns))
 	for _, c := range board.Columns {
 		if strings.EqualFold(c.Name, ref) {
 			return c, board.Columns, nil
 		}
+		names = append(names, c.Name)
 	}
-	return boarddomain.Column{}, board.Columns, fmt.Errorf("column %q not found", sanitize.Line(ref))
+	return boarddomain.Column{}, board.Columns, fmt.Errorf("column %q not found%s", sanitize.Line(ref), oneOf(names))
 }
 
 // resolveMember finds a member by ID or by name (ignoring case). A name
@@ -215,7 +227,16 @@ func resolveMember(ctx context.Context, ref string) (memberdomain.Member, error)
 	case 1:
 		return matches[0], nil
 	case 0:
-		return memberdomain.Member{}, fmt.Errorf("member %q not found — see `termino member list`", sanitize.Line(ref))
+		var names []string
+		for _, m := range members {
+			if !m.System() {
+				names = append(names, m.Name)
+			}
+		}
+		if len(names) == 0 {
+			return memberdomain.Member{}, fmt.Errorf("member %q not found — add one with `termino member add <name>`", sanitize.Line(ref))
+		}
+		return memberdomain.Member{}, fmt.Errorf("member %q not found%s", sanitize.Line(ref), oneOf(names))
 	default:
 		return memberdomain.Member{}, fmt.Errorf("several members are named %q — use the member ID", sanitize.Line(ref))
 	}
@@ -237,10 +258,15 @@ func resolveSprint(ctx context.Context, projectID, ref string) (sprintdomain.Spr
 			return s, nil
 		}
 	}
+	names := make([]string, 0, len(sprints))
 	for _, s := range sprints {
 		if strings.EqualFold(s.Name, ref) {
 			return s, nil
 		}
+		names = append(names, s.Name)
 	}
-	return sprintdomain.Sprint{}, fmt.Errorf("sprint %q not found — see `termino sprint list`", sanitize.Line(ref))
+	if len(names) == 0 {
+		return sprintdomain.Sprint{}, fmt.Errorf("sprint %q not found — create one with `termino sprint new <name>`", sanitize.Line(ref))
+	}
+	return sprintdomain.Sprint{}, fmt.Errorf("sprint %q not found%s", sanitize.Line(ref), oneOf(names))
 }

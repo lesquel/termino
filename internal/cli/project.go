@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/x/term"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	"github.com/lesquel/termino/internal/platform/config"
@@ -25,6 +28,7 @@ func newProjectCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newProjectNewCmd())
 	cmd.AddCommand(newProjectListCmd())
+	cmd.AddCommand(newProjectUseCmd())
 	return cmd
 }
 
@@ -46,14 +50,14 @@ func newProjectNewCmd() *cobra.Command {
 			if name == "" && len(args) == 1 {
 				name = args[0]
 			}
-			// Prompt for missing flags when running interactively.
+			// Prompt for missing values; answers are whole lines, so a
+			// name may contain spaces.
+			in := bufio.NewReader(cmd.InOrStdin())
 			if name == "" {
-				fmt.Print("Project name: ")
-				fmt.Scanln(&name) //nolint:errcheck
+				name = promptLine(in, cmd.OutOrStdout(), "Project name: ")
 			}
 			if key == "" {
-				fmt.Print("Project key (2-5 uppercase letters): ")
-				fmt.Scanln(&key) //nolint:errcheck
+				key = promptLine(in, cmd.OutOrStdout(), "Project key (2-5 letters): ")
 			}
 			name = sanitize.Line(name)
 			if name == "" {
@@ -133,11 +137,24 @@ func newProjectNewCmd() *cobra.Command {
 	return cmd
 }
 
-// newProjectListCmd returns `termino project list`.
+// promptLine prints prompt and reads one line. When stdin is not a terminal
+// the answer is not echoed, so a newline keeps the next prompt on its own line.
+func promptLine(in *bufio.Reader, out io.Writer, prompt string) string {
+	fmt.Fprint(out, prompt)
+	line, _ := in.ReadString('\n')
+	if !term.IsTerminal(os.Stdin.Fd()) {
+		fmt.Fprintln(out)
+	}
+	return strings.TrimSpace(line)
+}
+
+// newProjectListCmd returns `termino project list`; the current project is
+// marked with "*".
 func newProjectListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List all projects",
+		Short: "List all projects (current marked *)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			uc, err := globalContainer.ProjectUseCases()
 			if err != nil {
@@ -148,11 +165,45 @@ func newProjectListCmd() *cobra.Command {
 				return fmt.Errorf("list projects: %w", err)
 			}
 			if len(projects) == 0 {
-				fmt.Println("No projects found. Run `termino project new` to create one.")
+				fmt.Println("No projects yet. Run `termino setup` to create one.")
 				return nil
 			}
+			current, _ := currentProjectID()
 			for _, p := range projects {
-				fmt.Printf("  %s\t%s\t(%s)\n", p.Key, sanitize.Line(p.Name), p.Methodology)
+				mark := " "
+				if p.ID == current {
+					mark = "*"
+				}
+				fmt.Printf("%s %s\t%s\t(%s)\n", mark, p.Key, sanitize.Line(p.Name), p.Methodology)
+			}
+			return nil
+		},
+	}
+}
+
+// newProjectUseCmd returns `termino project use <key>`: make a project the
+// current one outside directories associated with another project.
+func newProjectUseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use <key>",
+		Short: "Make a project the current one",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, err := projectByKey(context.Background(), strings.TrimSpace(args[0]))
+			if err != nil {
+				return err
+			}
+			cfg, err := globalContainer.Config()
+			if err != nil {
+				return err
+			}
+			cfg.CurrentProjectID = p.ID
+			if err := config.Save(cfg); err != nil {
+				return fmt.Errorf("save config: %w", err)
+			}
+			fmt.Printf("✓ Now using %s (%s)\n", p.Key, sanitize.Line(p.Name))
+			if current, err := currentProjectID(); err == nil && current != p.ID {
+				fmt.Println("  Note: this directory is associated with another project, which still wins here.")
 			}
 			return nil
 		},

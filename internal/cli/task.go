@@ -24,9 +24,11 @@ func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <title>",
 		Short: "Add a new task to the current project",
-		Args:  cobra.ExactArgs(1),
+		Long: `Add a new task to the current project. Every argument is part of the
+title, so quotes are optional: termino add Fix login redirect`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			title, desc, prio, err := normalizeTaskInput(args[0], description, priority)
+			title, desc, prio, err := normalizeTaskInput(strings.Join(args, " "), description, priority)
 			if err != nil {
 				return err
 			}

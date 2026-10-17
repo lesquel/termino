@@ -46,7 +46,8 @@ Windows) for linux, darwin and windows on amd64 and arm64, and a
 ```sh
 termino setup                               # user name, first project, widget, agents
 termino project new --name "Web app" --key WEB --associate-pwd
-termino add "Fix login redirect" --priority high
+termino add Fix login redirect --priority high   # quotes are optional
+termino ls                                  # list the tasks of the current project
 termino                                     # open the board
 termino widget install                      # status summary in bash/zsh prompt
 termino connect kiro                        # register the MCP server in Kiro
@@ -110,8 +111,10 @@ Run `termino <command> --help` for full flags.
 | `termino board` | Open the Kanban board (TUI) |
 | `termino setup` | Interactive setup: user name, first project, integrations |
 | `termino project new [--name --key --methodology kanban\|scrum --path --associate-pwd]` | Create a project |
-| `termino project list` | List projects |
-| `termino add <title> [--column --description --priority --label]` | Add a task to the current project; `--label` (repeatable) creates missing labels |
+| `termino project list` | List projects (current marked `*`) |
+| `termino project use <key>` | Make a project the current one |
+| `termino add <title...> [--column --description --priority --label]` | Add a task to the current project; every argument is part of the title; `--label` (repeatable) creates missing labels |
+| `termino task list [--column --assignee --label --priority]` / `termino ls` | List the current project's tasks column by column (`--assignee none` = unassigned) |
 | `termino task move <task> <column>` | Move a task |
 | `termino task assign <task> <member\|none>` | Assign or unassign |
 | `termino task done <task>` | Move a task to Done (the column named "Done", else the last column) |
@@ -133,11 +136,14 @@ Run `termino <command> --help` for full flags.
 
 Tasks are referenced as `KEY-N`, `N` / `#N` (current project) or by ID;
 columns, members and sprints by ID or case-insensitive name. Column names are
-unique per project, ignoring case.
+unique per project, ignoring case. When a name is not found, the error lists
+the valid ones. A wrong number of arguments or a bad flag prints the
+command's usage line; an unknown subcommand (`termino task mvoe`) fails and
+suggests the closest one.
 
 The "current project" is the one associated with the working directory
 (`project new --path` / `--associate-pwd`, longest matching path wins); outside
-any associated directory it is the project last created or selected.
+any associated directory it is the project last created or selected (`termino project use <key>`, or `p` on the board).
 
 ## Configuration
 
