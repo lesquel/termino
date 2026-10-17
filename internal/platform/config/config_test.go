@@ -132,3 +132,25 @@ func TestXDGPathResolution(t *testing.T) {
 		t.Errorf("StateDir() = %q; want %q", got, want)
 	}
 }
+
+func TestMotionEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		motion  bool
+		noColor string
+		want    bool
+	}{
+		{name: "motion on, color on", motion: true, want: true},
+		{name: "motion off", motion: false, want: false},
+		{name: "NO_COLOR disables animation", motion: true, noColor: "1", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("NO_COLOR", tt.noColor)
+			cfg := &config.Config{Motion: tt.motion}
+			if got := cfg.MotionEnabled(); got != tt.want {
+				t.Errorf("MotionEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -330,3 +330,55 @@ func TestActivityRepository_AppendAndList(t *testing.T) {
 		t.Errorf("ListRecent: got %d, want 1", len(recent))
 	}
 }
+
+func TestTaskRepository_ListLoadsLabelNamesAndFiltersByLabel(t *testing.T) {
+	db := openTestDB(t)
+	seedProjectAndColumn(t, db, "proj-lbl", "LBL", "col-lbl")
+	repo := taskinfra.NewTaskRepository(db)
+	ctx := context.Background()
+
+	for _, tk := range []taskdomain.Task{
+		{ID: "lb1", ProjectID: "proj-lbl", Number: 1, Title: "Labelled", ColumnID: "col-lbl", Priority: taskdomain.PriorityLow, Position: 1},
+		{ID: "lb2", ProjectID: "proj-lbl", Number: 2, Title: "Plain", ColumnID: "col-lbl", Priority: taskdomain.PriorityLow, Position: 2},
+	} {
+		if err := repo.Save(ctx, tk); err != nil {
+			t.Fatalf("Save %s: %v", tk.ID, err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO labels (id, project_id, name) VALUES ('l-bug', 'proj-lbl', 'bug'), ('l-ui', 'proj-lbl', 'ui')`); err != nil {
+		t.Fatalf("seed labels: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO task_labels (task_id, label_id) VALUES ('lb1', 'l-bug'), ('lb1', 'l-ui')`); err != nil {
+		t.Fatalf("seed task_labels: %v", err)
+	}
+
+	all, err := repo.List(ctx, taskdomain.TaskFilter{ProjectID: "proj-lbl"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("List: got %d, want 2", len(all))
+	}
+	if got := all[0].Labels; len(got) != 2 || got[0] != "bug" || got[1] != "ui" {
+		t.Errorf("lb1 labels = %v, want [bug ui]", got)
+	}
+	if got := all[1].Labels; len(got) != 0 {
+		t.Errorf("lb2 labels = %v, want none", got)
+	}
+
+	found, err := repo.FindByID(ctx, "lb1")
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if len(found.Labels) != 2 {
+		t.Errorf("FindByID labels = %v, want 2", found.Labels)
+	}
+
+	byLabel, err := repo.List(ctx, taskdomain.TaskFilter{ProjectID: "proj-lbl", LabelIDs: []string{"l-ui"}})
+	if err != nil {
+		t.Fatalf("List by label: %v", err)
+	}
+	if len(byLabel) != 1 || byLabel[0].ID != "lb1" {
+		t.Errorf("List by label: got %d tasks, want only lb1", len(byLabel))
+	}
+}

@@ -17,6 +17,12 @@ type Config struct {
 	Motion           bool   `toml:"motion"`
 }
 
+// MotionEnabled reports whether animations (e.g. the Done celebration) may
+// run: motion must be on and NO_COLOR unset or empty (TRD 10.5).
+func (c *Config) MotionEnabled() bool {
+	return c.Motion && os.Getenv("NO_COLOR") == ""
+}
+
 // defaults returns a Config with sensible zero-state defaults.
 func defaults() Config {
 	return Config{

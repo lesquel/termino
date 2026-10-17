@@ -34,7 +34,7 @@ func (p Priority) Valid() bool {
 type Task struct {
 	ID          string
 	ProjectID   string
-	Number      int     // monotonically increasing per project
+	Number      int // monotonically increasing per project
 	Title       string
 	Description string
 	ColumnID    string
@@ -45,9 +45,10 @@ type Task struct {
 	Points      *int
 	Position    float64 // fractional position within the column
 	DeletedAt   *time.Time
-	Source      *string // name of the source adapter (e.g. "kirospec")
-	SourcePath  *string // filesystem path of the source file
-	SourceRef   *string // unique reference within the source file
+	Source      *string  // name of the source adapter (e.g. "kirospec")
+	SourcePath  *string  // filesystem path of the source file
+	SourceRef   *string  // unique reference within the source file
+	Labels      []string // label names, read-only projection of task_labels
 }
 
 // Label is a coloured tag that can be applied to multiple tasks.

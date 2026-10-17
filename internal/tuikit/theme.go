@@ -80,11 +80,11 @@ func DefaultKeyMap() KeyMap {
 		),
 		Delete: key.NewBinding(
 			key.WithKeys("d"),
-			key.WithHelp("d", "delete"),
+			key.WithHelp("d", "delete (asks y/N)"),
 		),
 		Move: key.NewBinding(
-			key.WithKeys("m"),
-			key.WithHelp("m", "move"),
+			key.WithKeys("m", "H", "L"),
+			key.WithHelp("m/H/L", "move (picker / left / right)"),
 		),
 		Assign: key.NewBinding(
 			key.WithKeys("a"),
@@ -92,7 +92,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
+			key.WithHelp("/", "filter (text assignee: label: priority: agent:)"),
 		),
 		ProjectSelect: key.NewBinding(
 			key.WithKeys("p"),

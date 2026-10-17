@@ -10,6 +10,7 @@ import (
 	agentapp "github.com/lesquel/termino/internal/features/agent/application"
 	boardapp "github.com/lesquel/termino/internal/features/board/application"
 	boardtui "github.com/lesquel/termino/internal/features/board/presentation/tui"
+	memberapp "github.com/lesquel/termino/internal/features/member/application"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projecttui "github.com/lesquel/termino/internal/features/project/presentation/tui"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
@@ -38,7 +39,11 @@ type RootDeps struct {
 	BoardUC   *boardapp.BoardUseCases
 	TaskUC    *taskapp.TaskUseCases
 	AgentUC   *agentapp.AgentUseCases
+	MemberUC  *memberapp.MemberUseCases
 	Theme     *tuikit.Theme
+	// OnTaskDone, when set, runs after the board moves a task into the Done
+	// column (used to check the task's checkbox in its source file).
+	OnTaskDone func(taskID string)
 }
 
 // RootModel is the top-level Bubble Tea model.
@@ -81,13 +86,7 @@ func NewRootModel(deps RootDeps) RootModel {
 		m.selector = projecttui.NewSelectorModel(deps.ProjectUC, th)
 	} else {
 		m.screen = screenBoard
-		m.board = boardtui.NewBoardModel(
-			deps.Config.CurrentProjectID,
-			deps.BoardUC,
-			deps.DB,
-			th,
-			keys,
-		)
+		m.board = m.newBoard(deps.Config.CurrentProjectID)
 		m.activity = NewActivityModel(
 			deps.Config.CurrentProjectID,
 			activityLoader(deps.TaskUC),
@@ -96,6 +95,26 @@ func NewRootModel(deps RootDeps) RootModel {
 	}
 	m.help = NewHelpModel(th, keys)
 	return m
+}
+
+// newBoard builds the board model for projectID wired to the task, member
+// and agent use cases. Nil use cases simply disable the matching feature.
+func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
+	svc := boardtui.Services{
+		Actor:  defaultActor(m.deps.Config),
+		Motion: m.deps.Config.MotionEnabled(),
+		OnDone: m.deps.OnTaskDone,
+	}
+	if m.deps.TaskUC != nil {
+		svc.Tasks = m.deps.TaskUC
+	}
+	if m.deps.MemberUC != nil {
+		svc.Members = m.deps.MemberUC
+	}
+	if m.deps.AgentUC != nil {
+		svc.Agents = m.deps.AgentUC
+	}
+	return boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(svc)
 }
 
 // activityLoader wraps the task use case's ListRecentActivity to satisfy ActivityLoader.
@@ -130,6 +149,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.broadcast(msg)
 
 	case tea.KeyMsg:
+		// While the board has a prompt or picker open, every key is input.
+		if m.screen == screenBoard && m.board.Capturing() {
+			return m.routeToActiveScreen(msg)
+		}
 		// Global keys handled at root level.
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -154,13 +177,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case projecttui.ProjectSelectedMsg:
 		m.projectID = msg.ProjectID
 		m.screen = screenBoard
-		m.board = boardtui.NewBoardModel(
-			msg.ProjectID,
-			m.deps.BoardUC,
-			m.deps.DB,
-			m.theme,
-			m.keys,
-		)
+		m.board = m.newBoard(msg.ProjectID)
 		m.activity = NewActivityModel(
 			msg.ProjectID,
 			activityLoader(m.deps.TaskUC),
@@ -178,8 +195,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tasktui.TaskCreatedMsg:
 		m.screen = screenBoard
-		// Reload board.
-		return m, m.board.Init()
+		// Reload board (Init would start a second polling ticker).
+		return m, m.board.Reload()
 	}
 
 	// Handle 'n' key on board to open form.

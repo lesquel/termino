@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -99,7 +100,7 @@ func (r *TaskRepository) FindByID(ctx context.Context, id string) (taskdomain.Ta
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, project_id, number, title, description, column_id, sprint_id,
 		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref
+		       source, source_path, source_ref, `+labelsColumn+`
 		FROM   tasks
 		WHERE  id = ?`, id)
 	return scanTask(row)
@@ -110,7 +111,7 @@ func (r *TaskRepository) FindByNumber(ctx context.Context, projectID string, num
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, project_id, number, title, description, column_id, sprint_id,
 		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref
+		       source, source_path, source_ref, `+labelsColumn+`
 		FROM   tasks
 		WHERE  project_id = ? AND number = ? AND deleted_at IS NULL`, projectID, number)
 	return scanTask(row)
@@ -142,6 +143,13 @@ func (r *TaskRepository) List(ctx context.Context, filter taskdomain.TaskFilter)
 		like := "%" + filter.SearchText + "%"
 		args = append(args, like, like)
 	}
+	if len(filter.LabelIDs) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(filter.LabelIDs)), ",")
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM task_labels tl WHERE tl.task_id = tasks.id AND tl.label_id IN ("+placeholders+"))")
+		for _, id := range filter.LabelIDs {
+			args = append(args, id)
+		}
+	}
 	if !filter.IncludeDeleted {
 		conditions = append(conditions, "deleted_at IS NULL")
 	}
@@ -149,7 +157,7 @@ func (r *TaskRepository) List(ctx context.Context, filter taskdomain.TaskFilter)
 	query := `
 		SELECT id, project_id, number, title, description, column_id, sprint_id,
 		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref
+		       source, source_path, source_ref, ` + labelsColumn + `
 		FROM   tasks`
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -192,19 +200,38 @@ func (r *TaskRepository) NextNumber(ctx context.Context, projectID string) (int,
 }
 
 // scanTask scans a single task row from a *sql.Row.
+// labelSeparator joins label names in the labels projection; the ASCII unit
+// separator cannot appear in a sanitized label name.
+const labelSeparator = "\x1f"
+
+// labelsColumn projects the names of a task's labels as one joined string.
+const labelsColumn = `COALESCE((SELECT group_concat(l.name, char(31))
+		       FROM task_labels tl JOIN labels l ON l.id = tl.label_id
+		       WHERE tl.task_id = tasks.id), '') AS labels`
+
+// splitLabels turns the joined labels projection into sorted label names.
+func splitLabels(joined string) []string {
+	if joined == "" {
+		return nil
+	}
+	names := strings.Split(joined, labelSeparator)
+	sort.Strings(names)
+	return names
+}
+
 func scanTask(row *sql.Row) (taskdomain.Task, error) {
 	var t taskdomain.Task
 	var deletedAt, dueDate *string
 	var sprintID, assigneeID *string
 	var points int
-	var source, sourcePath, sourceRef string
+	var source, sourcePath, sourceRef, labels string
 	var priority string
 
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description,
 		&t.ColumnID, &sprintID, &priority, &assigneeID,
 		&dueDate, &points, &t.Position, &deletedAt,
-		&source, &sourcePath, &sourceRef,
+		&source, &sourcePath, &sourceRef, &labels,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -214,6 +241,7 @@ func scanTask(row *sql.Row) (taskdomain.Task, error) {
 	}
 
 	t.Priority = taskdomain.Priority(priority)
+	t.Labels = splitLabels(labels)
 	t.SprintID = sprintID
 	t.AssigneeID = assigneeID
 	if points > 0 {
@@ -253,18 +281,19 @@ func collectTasks(rows *sql.Rows) ([]taskdomain.Task, error) {
 		var deletedAt, dueDate *string
 		var sprintID, assigneeID *string
 		var points int
-		var source, sourcePath, sourceRef string
+		var source, sourcePath, sourceRef, labels string
 		var priority string
 
 		if err := rows.Scan(
 			&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description,
 			&t.ColumnID, &sprintID, &priority, &assigneeID,
 			&dueDate, &points, &t.Position, &deletedAt,
-			&source, &sourcePath, &sourceRef,
+			&source, &sourcePath, &sourceRef, &labels,
 		); err != nil {
 			return nil, fmt.Errorf("task row scan: %w", err)
 		}
 		t.Priority = taskdomain.Priority(priority)
+		t.Labels = splitLabels(labels)
 		t.SprintID = sprintID
 		t.AssigneeID = assigneeID
 		if points > 0 {

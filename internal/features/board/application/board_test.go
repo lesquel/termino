@@ -117,3 +117,28 @@ func TestWIPLimitEnforced(t *testing.T) {
 		t.Fatal("expected WIP limit error, got nil")
 	}
 }
+
+func TestGetBoardWithTasks_GroupsFullTasksByColumnInBoardOrder(t *testing.T) {
+	boardRepo := newInMemoryBoardRepo()
+	taskRepo := newInMemoryTaskRepo()
+	uc := newBoardUC(boardRepo, taskRepo)
+	ctx := context.Background()
+	col, _ := uc.AddColumn(ctx, testActor(), "proj-1", "Backlog", 0)
+	_ = taskRepo.Save(ctx, taskdomain.Task{ID: "t1", ProjectID: "proj-1", Number: 1, Title: "First", ColumnID: col.ID, Position: 1})
+	_ = taskRepo.Save(ctx, taskdomain.Task{ID: "t2", ProjectID: "proj-1", Number: 2, Title: "Second", ColumnID: col.ID, Position: 2})
+
+	board, tasks, err := uc.GetBoardWithTasks(ctx, "proj-1")
+	if err != nil {
+		t.Fatalf("GetBoardWithTasks: %v", err)
+	}
+	ids := board.Tasks[col.ID]
+	full := tasks[col.ID]
+	if len(ids) != 2 || len(full) != 2 {
+		t.Fatalf("got %d ids and %d tasks, want 2 and 2", len(ids), len(full))
+	}
+	for i := range ids {
+		if ids[i] != full[i].ID {
+			t.Errorf("index %d: id %q does not match task %q", i, ids[i], full[i].ID)
+		}
+	}
+}

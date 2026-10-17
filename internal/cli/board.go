@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
 	apptui "github.com/lesquel/termino/internal/app/tui"
 	"github.com/lesquel/termino/internal/platform/config"
+	"github.com/spf13/cobra"
 )
 
 // newBoardCmd returns `termino board` — opens the TUI board.
@@ -43,6 +43,10 @@ func startTUI() error {
 	if err != nil {
 		return err
 	}
+	memberUC, err := globalContainer.MemberUseCases()
+	if err != nil {
+		return err
+	}
 
 	theme, err := apptui.Load(cfg.Theme)
 	if err != nil {
@@ -57,6 +61,7 @@ func startTUI() error {
 		BoardUC:   boardUC,
 		TaskUC:    taskUC,
 		AgentUC:   agentUC,
+		MemberUC:  memberUC,
 		Theme:     theme,
 	}
 	return apptui.Start(deps)

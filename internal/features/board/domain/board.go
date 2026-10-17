@@ -42,6 +42,23 @@ func CanAddToColumn(board Board, col Column) error {
 	return nil
 }
 
+// WIPExceeded reports whether col currently holds more tasks than its WIP
+// limit allows. A column without a limit never exceeds it.
+func WIPExceeded(board Board, col Column) bool {
+	return col.WIPLimit != nil && len(board.Tasks[col.ID]) > *col.WIPLimit
+}
+
+// DoneColumn returns the column that represents completed work: by convention
+// the column with the highest position. ok is false when cols is empty.
+func DoneColumn(cols []Column) (done Column, ok bool) {
+	for i, c := range cols {
+		if i == 0 || c.Position > done.Position {
+			done = c
+		}
+	}
+	return done, len(cols) > 0
+}
+
 // ErrColumnNotFound is returned when a requested column does not exist.
 var ErrColumnNotFound = errors.New("column not found")
 

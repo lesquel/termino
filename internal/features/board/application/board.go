@@ -48,6 +48,30 @@ func (uc *BoardUseCases) GetBoard(ctx context.Context, projectID string) (boardd
 	}, nil
 }
 
+// GetBoardWithTasks assembles the Board projection together with the full
+// tasks of each column, in the same order as Board.Tasks. Presentation layers
+// use it to render cards (number, title, assignee) without extra lookups.
+func (uc *BoardUseCases) GetBoardWithTasks(
+	ctx context.Context,
+	projectID string,
+) (boarddomain.Board, map[string][]taskdomain.Task, error) {
+	cols, err := uc.board.ListColumns(ctx, projectID)
+	if err != nil {
+		return boarddomain.Board{}, nil, fmt.Errorf("list columns: %w", err)
+	}
+	allTasks, err := uc.tasks.List(ctx, taskdomain.TaskFilter{ProjectID: projectID})
+	if err != nil {
+		return boarddomain.Board{}, nil, fmt.Errorf("list tasks: %w", err)
+	}
+	ids := make(map[string][]string)
+	full := make(map[string][]taskdomain.Task)
+	for _, t := range allTasks {
+		ids[t.ColumnID] = append(ids[t.ColumnID], t.ID)
+		full[t.ColumnID] = append(full[t.ColumnID], t)
+	}
+	return boarddomain.Board{ProjectID: projectID, Columns: cols, Tasks: ids}, full, nil
+}
+
 // AddColumn creates a new column on the board.
 func (uc *BoardUseCases) AddColumn(
 	ctx context.Context,
