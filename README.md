@@ -96,10 +96,10 @@ project whose `--key` you pass; a `--key` no project uses yet adds a project.
 | `d` | Delete the card (asks y/N; soft delete) |
 | `/` | Filter: free text, `assignee:`, `label:`, `priority:`, `agent:` (`esc` clears) |
 | `n` | New task |
-| `enter` | Task detail |
+| `enter` | Task detail (`esc` or `enter` closes it) |
 | `p` | Project selector |
 | `s` | Settings: theme, shell widget, motion |
-| `?` | Help |
+| `?` | Help: every key, by screen (`↑`/`↓` scroll) |
 | `q` / `ctrl+c` | Quit |
 
 The header names the project (`termino · Web app (WEB)`) and the active
@@ -120,6 +120,11 @@ saves (`enter` also saves from the title field, and inserts a newline in the
 description). The project selector (`p`) marks the current project; `q` goes
 back to the board. The built-in `CLI` and `System` members are not offered in
 the assign picker.
+
+The task detail, help, pickers, delete prompt, new-task form, project selector
+and settings open as dialogs centered over the board, which stays visible
+around them. Dialogs that do not fit the terminal scroll (`↑`/`↓`); with
+`NO_COLOR` they are drawn with a border and plain text only.
 
 Settings (`s`) changes three things without leaving the board, each saved to
 `config.toml` and confirmed on a status line (`✓ Theme set to nord`):

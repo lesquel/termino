@@ -244,6 +244,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			if m.screen != screenHelp {
 				m.screen = screenHelp
+				m.help = m.help.Reset()
 				return m, nil
 			}
 		case "p":
@@ -448,33 +449,40 @@ func (m RootModel) routeToScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View implements tea.Model.
+// View implements tea.Model. Every screen other than the board is a dialog
+// drawn over it, so the board stays visible around the dialog.
 func (m RootModel) View() string {
+	var dialog string
 	switch m.screen {
-	case screenProjectSelector:
-		return m.selector.View()
 	case screenBoard:
-		boardView := m.board.View()
-		if m.activity.Visible() {
-			return lipgloss.JoinHorizontal(lipgloss.Top, boardView, m.activity.View())
-		}
-		return boardView
+		return m.boardView()
+	case screenProjectSelector:
+		dialog = m.selector.View()
 	case screenTaskDetail:
-		return m.detail.View()
+		dialog = m.detail.View()
 	case screenForm:
-		formView := lipgloss.Place(m.width, m.height,
-			lipgloss.Center, lipgloss.Center,
-			m.form.View(),
-		)
-		return formView
+		dialog = m.form.View()
 	case screenHelp:
-		m.help.width = m.width
-		m.help.height = m.height
-		return m.help.View()
+		dialog = m.help.View()
 	case screenSettings:
-		return m.settings.View()
+		dialog = m.settings.View()
+	default:
+		return ""
 	}
-	return ""
+	return tuikit.Overlay(m.boardView(), dialog, m.width, m.height)
+}
+
+// boardView is the board with the activity panel, or "" before a project
+// is open.
+func (m RootModel) boardView() string {
+	if m.projectID == "" {
+		return ""
+	}
+	boardView := m.board.View()
+	if m.activity.Visible() {
+		return lipgloss.JoinHorizontal(lipgloss.Top, boardView, m.activity.View())
+	}
+	return boardView
 }
 
 // columnNames maps the board's column IDs to their names.

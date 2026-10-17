@@ -68,6 +68,7 @@ type FormModel struct {
 	projectID   string
 	columnID    string
 	width       int
+	height      int
 	err         string
 }
 
@@ -112,8 +113,9 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		// Border, padding and prompt take 10 cells; keep the box on screen.
-		w := min(max(m.width-12, 10), maxInputWidth)
+		m.height = msg.Height
+		// The prompt and the cursor take three cells of the dialog width.
+		w := max(m.frame().Inner(m.width)-3, 1)
 		m.titleInput.Width = w
 		m.labelsInput.Width = w
 
@@ -223,9 +225,19 @@ func cancelForm() tea.Cmd {
 	return func() tea.Msg { return FormCancelledMsg{} }
 }
 
-// View implements tea.Model.
+// frame is the form dialog without its body.
+func (m FormModel) frame() tuikit.Dialog {
+	return tuikit.Dialog{
+		Title:  "New Task",
+		Badge:  "esc cancel",
+		Footer: "tab next field · ←/→ priority · enter create",
+		Width:  maxInputWidth + 3,
+	}
+}
+
+// View implements tea.Model. The form is a dialog; the root draws it over
+// the board.
 func (m FormModel) View() string {
-	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 	errStyle := lipgloss.NewStyle().Foreground(m.theme.Danger)
 
@@ -234,26 +246,37 @@ func (m FormModel) View() string {
 		prio = "◀ " + prio + " ▶"
 	}
 
-	errLine := ""
-	if m.err != "" {
-		errLine = "\n" + errStyle.Render(m.err)
-	}
-
-	boxStyle := lipgloss.NewStyle().
-		Border(m.theme.BorderStyle).
-		BorderForeground(m.theme.Border).
-		Padding(1, 2)
-
-	content := fmt.Sprintf("%s\n\n%s\n%s\n\n%s %s\n\n%s\n%s%s\n\n%s",
-		titleStyle.Render("New Task"),
+	d := m.frame()
+	d.Body = []string{
 		labelStyle.Render("Title:"),
 		m.titleInput.View(),
-		labelStyle.Render("Priority:"),
-		prio,
+		"",
+		labelStyle.Render("Priority:") + " " + prio,
+		"",
 		labelStyle.Render("Labels:"),
 		m.labelsInput.View(),
-		errLine,
-		labelStyle.Render("tab=next field  ←/→=priority  enter=create  esc=cancel"),
-	)
-	return boxStyle.Render(content)
+	}
+	focusRow := map[formField]int{fieldTitle: 1, fieldPriority: 3, fieldLabels: 6}[m.focus]
+	if m.err != "" {
+		d.Body = append(d.Body, "", errStyle.Render(m.err))
+		focusRow = len(d.Body) - 1
+	}
+	// Short terminals: drop the spacing rows, then scroll to the focused field.
+	if room := d.BodyRoom(m.width, m.height); m.height > 0 && room < len(d.Body) {
+		compact := make([]string, 0, len(d.Body))
+		for i, l := range d.Body {
+			if l == "" {
+				if i < focusRow {
+					focusRow--
+				}
+				continue
+			}
+			compact = append(compact, l)
+		}
+		d.Body = compact
+		if room > 0 && focusRow >= room {
+			d.Scroll = focusRow - room + 1
+		}
+	}
+	return d.Render(m.theme, m.width, m.height)
 }

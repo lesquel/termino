@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -65,9 +66,13 @@ func NewSelectorModel(uc *projectapp.ProjectUseCases, theme *tuikit.Theme) Selec
 
 	l := list.New(nil, delegate, 0, 0)
 	l.Title = "Select a Project"
+	l.SetShowTitle(false) // the dialog header shows it
 	l.Styles.Title = lipgloss.NewStyle().
 		Foreground(theme.Accent).
 		Bold(true)
+	// The root model owns ?, so the list's full-help toggle never fires.
+	l.KeyMap.ShowFullHelp.SetEnabled(false)
+	l.KeyMap.CloseFullHelp.SetEnabled(false)
 	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(theme.Accent)
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(theme.Accent)
 	// The root model owns q; esc only clears a filter here, never quits.
@@ -114,7 +119,12 @@ func (m SelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetSize(msg.Width, msg.Height-4)
+		f := m.frame()
+		room := f.BodyRoom(m.width, m.height)
+		if m.height <= 0 {
+			room = 20
+		}
+		m.list.SetSize(f.Inner(m.width), max(room, 1))
 
 	case ProjectsLoadedMsg:
 		if msg.Err != nil {
@@ -154,19 +164,29 @@ func (m SelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View implements tea.Model.
+// frame is the selector dialog without its body.
+func (m SelectorModel) frame() tuikit.Dialog {
+	badge := "q quit"
+	if m.current != "" {
+		badge = "q back"
+	}
+	return tuikit.Dialog{Title: "Select a Project", Badge: badge, Width: 56}
+}
+
+// View implements tea.Model. The selector is a dialog; the root draws it
+// over the board when one is open.
 func (m SelectorModel) View() string {
-	if !m.ready {
-		return lipgloss.NewStyle().
-			Foreground(m.theme.TextMuted).
-			Render("Loading projects…")
+	d := m.frame()
+	muted := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
+	switch {
+	case !m.ready:
+		d.Body = []string{muted.Render("Loading projects…")}
+	case len(m.list.Items()) == 0:
+		d.Body = strings.Split(muted.Render("No projects yet.\n\nRun `termino setup` to create your first project,\nthen open the board again with `termino`.\n\nPress q to quit."), "\n")
+	default:
+		d.Body = strings.Split(m.list.View(), "\n")
 	}
-	if len(m.list.Items()) == 0 {
-		return lipgloss.NewStyle().
-			Foreground(m.theme.TextMuted).
-			Render("No projects yet.\n\nRun `termino setup` to create your first project,\nthen open the board again with `termino`.\n\nPress q to quit.")
-	}
-	return m.list.View()
+	return d.Render(m.theme, m.width, m.height)
 }
 
 // Filtering reports whether the list filter prompt is consuming keystrokes.

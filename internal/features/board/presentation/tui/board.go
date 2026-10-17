@@ -762,7 +762,12 @@ func (m BoardModel) View() string {
 	if bottom == "" {
 		bottom = m.footer()
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.header(), m.statusRow(), body, bottom)
+	view := lipgloss.JoinVertical(lipgloss.Left, m.header(), m.statusRow(), body, bottom)
+	if d, ok := m.dialog(); ok {
+		// Pickers and the delete prompt float over the board.
+		return tuikit.Overlay(view, d.Render(m.theme, m.width, m.height), m.width, m.height)
+	}
+	return view
 }
 
 // header shows the project and the active filter.
@@ -880,33 +885,57 @@ func (m BoardModel) footer() string {
 	return ansi.Truncate(strings.Join(parts, sep), width, "…")
 }
 
-// bottomBar renders the open prompt or picker, or "" in normal mode.
+// bottomBar renders the filter prompt, or "" when it is closed.
 func (m BoardModel) bottomBar() string {
+	if m.mode != modeFilter {
+		return ""
+	}
 	box := lipgloss.NewStyle().Border(m.theme.BorderStyle).BorderForeground(m.theme.Accent).Padding(0, 1)
+	return box.Render("Filter cards\n" + m.filterInput.View() + "\nenter=apply  esc=cancel")
+}
+
+// dialog is the open picker or delete prompt, drawn over the board.
+func (m BoardModel) dialog() (tuikit.Dialog, bool) {
 	title := m.TaskRef(m.target.Number) + " " + sanitize.Line(m.target.Title)
 	switch m.mode {
-	case modeFilter:
-		return box.Render("Filter cards\n" + m.filterInput.View() + "\nenter=apply  esc=cancel")
 	case modeConfirmDelete:
-		return box.BorderForeground(m.theme.Danger).
-			Render(fmt.Sprintf("Delete %s? (y/N)", title))
+		return tuikit.Dialog{
+			Title:  "Delete " + title + "?",
+			Badge:  "y/N",
+			Body:   []string{"Press y to delete the task.", "Any other key keeps it."},
+			Footer: "y delete · any other key cancel",
+			Border: m.theme.Danger,
+		}, true
 	case modeMove, modeAssign:
-		head := "Move " + title + " to:"
+		head := "Move " + title
+		sub := "to column:"
 		if m.mode == modeAssign {
-			head = "Assign " + title + " to:"
+			head, sub = "Assign "+title, "to:"
 		}
-		lines := []string{head}
+		body := make([]string, 0, len(m.picker))
 		for i, opt := range m.picker {
-			cursor := "  "
+			// The marker is text, so the choice survives NO_COLOR.
+			line := fmt.Sprintf("  %d. %s", i+1, opt.label)
 			if i == m.pickerIdx {
-				cursor = "> "
+				line = lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true).
+					Render(fmt.Sprintf("> %d. %s", i+1, opt.label))
 			}
-			lines = append(lines, fmt.Sprintf("%s%d. %s", cursor, i+1, opt.label))
+			body = append(body, line)
 		}
-		lines = append(lines, "enter=choose  esc=cancel")
-		return box.Render(strings.Join(lines, "\n"))
+		d := tuikit.Dialog{
+			Title:    head,
+			Subtitle: sub,
+			Badge:    "esc cancel",
+			Body:     body,
+			Footer:   "↑↓ choose · 1-9 pick · enter confirm",
+		}
+		// Keep the highlighted option in view on short terminals.
+		if room := d.BodyRoom(m.width, m.height); room > 0 && m.pickerIdx >= room {
+			d.Scroll = m.pickerIdx - room + 1
+		}
+		return d, true
 	}
-	return ""
+	return tuikit.Dialog{}, false
 }
 
 func (m BoardModel) doneSymbol() string {

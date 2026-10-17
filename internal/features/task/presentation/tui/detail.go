@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
@@ -155,9 +156,10 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		if m.width > 8 {
-			m.descTextarea.SetWidth(m.width - 8)
-		}
+		inner := m.frame().Inner(m.width)
+		m.titleInput.Width = max(inner-3, 1) // the prompt takes cells too
+		m.descTextarea.SetWidth(max(inner, 1))
+		m.descTextarea.SetHeight(min(5, max(m.height-14, 1)))
 		m.scrollY = min(m.scrollY, m.maxScroll())
 
 	case TaskUpdatedMsg:
@@ -210,7 +212,7 @@ func (m DetailModel) handleViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editFocused = 0
 		m.titleInput.Focus()
 		return m, textinput.Blink
-	case "esc":
+	case "esc", "enter":
 		return m, goBack()
 	}
 	return m, nil
@@ -278,76 +280,101 @@ func goBack() tea.Cmd {
 	return func() tea.Msg { return GoBackMsg{} }
 }
 
-// View implements tea.Model.
-func (m DetailModel) View() string {
-	if !m.ready {
-		return lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("Loading task…")
-	}
+// detailWidth is the preferred inner width of the detail dialog.
+const detailWidth = 64
 
-	if m.editing {
-		return m.editView()
-	}
-	return m.detailView()
+// View implements tea.Model. The detail is a dialog; the root draws it over
+// the board.
+func (m DetailModel) View() string {
+	return m.dialog().Render(m.theme, m.width, m.height)
 }
 
-// bodyHeight is the number of content lines that fit above the footer. An
-// unknown (zero) terminal height shows all content.
-func (m DetailModel) bodyHeight(total int) int {
-	if m.height <= 0 {
-		return total
+// frame is the dialog without its body, enough to size the content.
+func (m DetailModel) frame() tuikit.Dialog {
+	if !m.ready {
+		return tuikit.Dialog{Title: "Task", Badge: "esc close", Width: detailWidth}
 	}
-	return max(m.height-3, 1)
+	if m.editing {
+		hint := "enter/ctrl+s=save · tab=switch field · esc=cancel"
+		if m.editFocused == 1 {
+			hint = "ctrl+s=save · enter=newline · tab=switch field · esc=cancel"
+		}
+		return tuikit.Dialog{
+			Title:    "Edit Task",
+			Subtitle: m.taskRef() + " " + sanitize.Line(m.task.Title),
+			Badge:    "esc cancel",
+			Footer:   hint,
+			Width:    detailWidth,
+		}
+	}
+	footer := "scroll ↑↓ · edit e · close esc / enter"
+	if m.flash != "" {
+		footer = "✓ " + m.flash + " · " + footer
+	}
+	return tuikit.Dialog{
+		Title:    m.taskRef() + " " + sanitize.Line(m.task.Title),
+		Subtitle: sanitize.Line(m.columnName(m.task.ColumnID)),
+		Badge:    "esc close",
+		Footer:   footer,
+		Width:    detailWidth,
+	}
+}
+
+// dialog is the frame with the body for the current state.
+func (m DetailModel) dialog() tuikit.Dialog {
+	d := m.frame()
+	switch {
+	case !m.ready:
+		d.Body = []string{lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("Loading task…")}
+	case m.editing:
+		d.Body = m.editLines()
+		if m.editFocused == 1 {
+			d.Scroll = len(d.Body) // clamped: keeps the description in view
+		}
+	default:
+		d.Body = m.contentLines(d.Inner(m.width))
+		d.Scroll = m.scrollY
+	}
+	return d
 }
 
 // maxScroll is the largest valid scroll offset for the current content.
 func (m DetailModel) maxScroll() int {
-	n := len(m.contentLines())
-	return max(n-m.bodyHeight(n), 0)
-}
-
-func (m DetailModel) detailView() string {
-	contentLines := m.contentLines()
-	start := min(max(m.scrollY, 0), m.maxScroll())
-	end := min(start+m.bodyHeight(len(contentLines)), len(contentLines))
-	visible := strings.Join(contentLines[start:end], "\n")
-
-	footer := lipgloss.NewStyle().Foreground(m.theme.TextMuted).
-		Render("\ne=edit  ↑↓/jk=scroll  esc=back")
-	if m.flash != "" {
-		footer += "  " + lipgloss.NewStyle().Foreground(m.theme.Success).Bold(true).Render("✓ "+m.flash)
+	if !m.ready || m.editing {
+		return 0
 	}
-	return visible + footer
+	return m.dialog().MaxScroll(m.width, m.height)
 }
 
-func (m DetailModel) contentLines() []string {
+// contentLines is the scrollable body: fields, description, comments and
+// activity, wrapped to width cells.
+func (m DetailModel) contentLines(width int) []string {
 	t := m.task
 
-	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Width(14)
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Width(12)
 	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
-	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
-	sectionStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted).MarginTop(1)
+	sectionStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
 
-	ref := m.taskRef()
-	lines := []string{
-		titleStyle.Render(ref + " " + sanitize.Line(t.Title)),
-		"",
-		labelStyle.Render("Priority:") + valueStyle.Render(string(t.Priority)),
-		labelStyle.Render("Column:") + valueStyle.Render(sanitize.Line(m.columnName(t.ColumnID))),
+	field := func(label, value string) string {
+		return labelStyle.Render(label) + valueStyle.Render(value)
 	}
+	assignee := "unassigned"
 	if t.AssigneeID != nil {
-		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(sanitize.Line(m.memberName(*t.AssigneeID))))
-	} else {
-		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render("unassigned"))
+		assignee = sanitize.Line(m.memberName(*t.AssigneeID))
+	}
+	lines := []string{
+		field("Priority:", string(t.Priority)),
+		field("Assignee:", assignee),
 	}
 	if len(t.Labels) > 0 {
 		labels := make([]string, len(t.Labels))
 		for i, l := range t.Labels {
 			labels[i] = sanitize.Line(l)
 		}
-		lines = append(lines, labelStyle.Render("Labels:")+valueStyle.Render(strings.Join(labels, ", ")))
+		lines = append(lines, field("Labels:", strings.Join(labels, ", ")))
 	}
 	if t.DueDate != nil {
-		lines = append(lines, labelStyle.Render("Due:")+valueStyle.Render(t.DueDate.Format("2006-01-02")))
+		lines = append(lines, field("Due:", t.DueDate.Format("2006-01-02")))
 	}
 	if t.Description != "" {
 		lines = append(lines, "", sectionStyle.Render("Description"), sanitize.Clean(t.Description))
@@ -370,25 +397,19 @@ func (m DetailModel) contentLines() []string {
 		}
 	}
 
-	return strings.Split(strings.Join(lines, "\n"), "\n")
+	// Wrap long rows so nothing is cut at the dialog edge.
+	text := strings.Join(lines, "\n")
+	if width > 0 {
+		text = ansi.Wrap(text, width, " ")
+	}
+	return strings.Split(text, "\n")
 }
 
-func (m DetailModel) editView() string {
-	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
+// editLines is the body of the edit form.
+func (m DetailModel) editLines() []string {
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
-
-	hint := "enter/ctrl+s=save  tab=switch field  esc=cancel"
-	if m.editFocused == 1 {
-		hint = "ctrl+s=save  enter=newline  tab=switch field  esc=cancel"
-	}
-	return fmt.Sprintf("%s\n\n%s\n%s\n\n%s\n%s\n\n%s",
-		titleStyle.Render("Edit Task"),
-		labelStyle.Render("Title:"),
-		m.titleInput.View(),
-		labelStyle.Render("Description:"),
-		m.descTextarea.View(),
-		lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(hint),
-	)
+	lines := []string{labelStyle.Render("Title:"), m.titleInput.View(), "", labelStyle.Render("Description:")}
+	return append(lines, strings.Split(m.descTextarea.View(), "\n")...)
 }
 
 func timeAgo(t time.Time) string {

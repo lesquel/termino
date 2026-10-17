@@ -134,11 +134,14 @@ func TestDetailModel_ScrollAndEdit(t *testing.T) {
 	if !strings.Contains(m.View(), "#3 Long") {
 		t.Fatalf("title should be visible before scrolling:\n%s", m.View())
 	}
+	if !strings.Contains(m.View(), "Priority:") {
+		t.Fatalf("the first body row should be visible before scrolling:\n%s", m.View())
+	}
 	for i := 0; i < 3; i++ {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	}
-	if strings.Contains(m.View(), "#3 Long") {
-		t.Errorf("title should scroll out of view after j:\n%s", m.View())
+	if strings.Contains(m.View(), "Priority:") || !strings.Contains(m.View(), "#3 Long") {
+		t.Errorf("j should scroll the body while the title stays in the header:\n%s", m.View())
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 	if !strings.Contains(m.View(), "Edit Task") {

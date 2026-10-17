@@ -51,3 +51,30 @@ func TestSelectorEmptyPointsToSetup(t *testing.T) {
 		t.Errorf("empty selector should point to termino setup:\n%s", view)
 	}
 }
+
+// The selector is a dialog that fits every supported size.
+func TestSelectorIsADialogThatFits(t *testing.T) {
+	theme, err := tuikit.Load("default", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range [][2]int{{100, 30}, {80, 24}, {60, 20}, {30, 10}} {
+		var m tea.Model = projecttui.NewSelectorModel(nil, theme).WithCurrent("p1")
+		m, _ = m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		m, _ = m.Update(projecttui.ProjectsLoadedMsg{Projects: []projectdomain.Project{
+			{ID: "p1", Name: "Alpha", Key: "ALP"}, {ID: "p2", Name: "Beta", Key: "BET"},
+		}})
+		lines := strings.Split(ansi.Strip(m.View()), "\n")
+		if !strings.HasPrefix(lines[0], "╭") || !strings.Contains(lines[1], "Select a") {
+			t.Fatalf("%dx%d: expected a titled dialog:\n%s", size[0], size[1], strings.Join(lines, "\n"))
+		}
+		if len(lines) > size[1] {
+			t.Errorf("%dx%d: %d rows tall", size[0], size[1], len(lines))
+		}
+		for _, l := range lines {
+			if ansi.StringWidth(l) > size[0]-2 {
+				t.Errorf("%dx%d: row is %d cells: %q", size[0], size[1], ansi.StringWidth(l), l)
+			}
+		}
+	}
+}

@@ -235,13 +235,35 @@ func onOffLabel(on bool) string {
 	return "Off"
 }
 
-// View implements tea.Model.
+// frame is the settings dialog without its body. It is wide (up to the
+// terminal width) so the theme preview fits beside the list.
+func (m SettingsModel) frame() tuikit.Dialog {
+	sub := ""
+	if m.project != "" {
+		sub = "Project: " + m.project
+		if m.key != "" {
+			sub += " (" + m.key + ")"
+		}
+	}
+	d := tuikit.Dialog{
+		Title:    "Settings",
+		Subtitle: sub,
+		Badge:    "esc back",
+		Footer:   "↑/↓ move · enter apply/toggle · esc back",
+		Width:    90,
+	}
+	if m.width > 0 {
+		d.MaxWidth = m.width - 2
+	}
+	return d
+}
+
+// View implements tea.Model. Settings is a dialog; the root draws it over
+// the board.
 func (m SettingsModel) View() string {
 	t := m.theme
-	w := m.width
-	if w <= 0 {
-		w = 80
-	}
+	d := m.frame()
+	inner := d.Inner(m.width)
 	accent := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(t.TextMuted)
 	text := lipgloss.NewStyle().Foreground(t.Text)
@@ -273,7 +295,7 @@ func (m SettingsModel) View() string {
 	}
 	var preview string
 	if th, err := m.deps.LoadTheme(previewName); err == nil {
-		pw := w - listW - 5
+		pw := inner - listW - 5
 		if pw >= 44 {
 			preview = setuptui.RenderPreview(th, m.project, m.key, pw)
 		}
@@ -302,29 +324,30 @@ func (m SettingsModel) View() string {
 	}
 
 	label := func(s string) string { return fmt.Sprintf("%-14s", s) }
-	lines := []string{
-		accent.Render("Settings"),
-		muted.Render(strings.Repeat("─", max(min(w, 80)-2, 10))),
-		themes,
+	body := strings.Split(themes, "\n")
+	widgetLine := len(body) + 1
+	body = append(body,
 		"",
-		row(m.widgetRow(), label("Shell widget")+widgetState) + "  " + muted.Render(widgetInfo),
-		row(m.motionRow(), label("Motion")+onOffLabel(m.motion)) + "  " + muted.Render(motionInfo),
-		"",
-	}
+		row(m.widgetRow(), label("Shell widget")+widgetState)+"  "+muted.Render(widgetInfo),
+		row(m.motionRow(), label("Motion")+onOffLabel(m.motion))+"  "+muted.Render(motionInfo),
+	)
 	if m.status != "" {
+		body = append(body, "")
 		st := lipgloss.NewStyle().Foreground(t.Success)
 		if m.statusErr {
 			st = lipgloss.NewStyle().Foreground(t.Danger)
 		}
-		lines = append(lines, st.Render(m.status))
-	} else {
-		lines = append(lines, "")
+		body = append(body, st.Render(m.status))
 	}
-	lines = append(lines, muted.Render("↑/↓ move · enter apply/toggle · esc back"))
+	d.Body = body
 
-	out := strings.Split(strings.Join(lines, "\n"), "\n")
-	for i, l := range out {
-		out[i] = ansi.Truncate(l, max(w-2, 10), "…")
+	// Keep the highlighted row in view on short terminals.
+	cursorLine := 1 + m.cursor // themes follow the "Theme" heading
+	if m.cursor >= m.widgetRow() {
+		cursorLine = widgetLine + m.cursor - m.widgetRow()
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Render(strings.Join(out, "\n"))
+	if room := d.BodyRoom(m.width, m.height); m.height > 0 && room > 0 && cursorLine >= room {
+		d.Scroll = cursorLine - room + 1
+	}
+	return d.Render(t, m.width, m.height)
 }

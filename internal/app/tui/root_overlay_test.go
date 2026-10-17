@@ -53,11 +53,11 @@ func TestRootDetailShowsColumnName(t *testing.T) {
 	m, _ := newSizedRoot(t, 120, 40)
 	m, _ = m.Update(key("enter"))
 	m, _ = m.Update(tasktui.TaskLoadedMsg{Task: taskdomain.Task{ID: "t1", Number: 1, Title: "Hello", ColumnID: "c1"}})
-	view := m.View()
+	lines := strings.Split(m.View(), "\n")
 	line := ""
-	for _, l := range strings.Split(view, "\n") {
-		if strings.Contains(l, "Column:") {
-			line = l
+	for i, l := range lines {
+		if strings.Contains(l, "esc close") && i+1 < len(lines) {
+			line = lines[i+1] // the dialog subtitle
 		}
 	}
 	if !strings.Contains(line, "Backlog") || strings.Contains(line, "c1") {
