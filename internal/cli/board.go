@@ -127,7 +127,7 @@ func ensureProject(cmd *cobra.Command) (bool, error) {
 		fmt.Fprintln(cmd.OutOrStdout(), "No projects yet. Run `termino setup` to create your first project.")
 		return false, nil
 	}
-	if err := runSetup(cmd, &setupFlags{}); err != nil {
+	if err := runSetup(cmd, &setupFlags{openingBoard: true}); err != nil {
 		return false, err
 	}
 	projects, err = projectUC.ListProjects(context.Background())

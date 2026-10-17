@@ -22,6 +22,7 @@ type setupFlags struct {
 	name, project, key, methodology, theme string
 	associate, noAssociate, widget, yes    bool
 	noTUI                                  bool
+	openingBoard                           bool // not a flag: setup runs before the board opens
 }
 
 // newSetupCmd returns `termino setup`.
@@ -85,7 +86,7 @@ func runSetup(cmd *cobra.Command, f *setupFlags) error {
 	if !interactive || f.noTUI {
 		return wizard.Run(ctx)
 	}
-	return runSetupTUI(ctx, cmd, svc)
+	return runSetupTUI(ctx, cmd, svc, f.openingBoard)
 }
 
 // apply copies the flags that were given onto in.
@@ -163,7 +164,7 @@ func runSetupNonInteractive(ctx context.Context, cmd *cobra.Command, svc *setupa
 }
 
 // runSetupTUI runs the full-screen wizard.
-func runSetupTUI(ctx context.Context, cmd *cobra.Command, svc *setupapp.Service) error {
+func runSetupTUI(ctx context.Context, cmd *cobra.Command, svc *setupapp.Service, openingBoard bool) error {
 	st, err := svc.State(ctx)
 	if err != nil {
 		return err
@@ -176,7 +177,11 @@ func runSetupTUI(ctx context.Context, cmd *cobra.Command, svc *setupapp.Service)
 		}
 	}
 	apply := func(in setupapp.SetupInput) (setupapp.SetupResult, error) { return svc.Apply(ctx, in) }
-	final, err := tea.NewProgram(setuptui.New(st, apply, loadTheme, chrome), tea.WithAltScreen()).Run()
+	wiz := setuptui.New(st, apply, loadTheme, chrome)
+	if openingBoard {
+		wiz = wiz.OpeningBoard()
+	}
+	final, err := tea.NewProgram(wiz, tea.WithAltScreen()).Run()
 	if err != nil {
 		return fmt.Errorf("setup wizard: %w", err)
 	}
@@ -185,6 +190,9 @@ func runSetupTUI(ctx context.Context, cmd *cobra.Command, svc *setupapp.Service)
 	if !done {
 		fmt.Fprintln(cmd.OutOrStdout(), "Setup cancelled. Nothing was changed.")
 		return nil
+	}
+	if openingBoard {
+		return nil // the board opens next; its header names the project
 	}
 	printSetupResult(cmd, res)
 	return nil

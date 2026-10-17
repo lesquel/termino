@@ -323,3 +323,17 @@ func TestFitsNarrowTerminals(t *testing.T) {
 		}
 	}
 }
+
+// When setup runs on the way to the board, the done screen says enter opens
+// the board instead of "exit".
+func TestDoneHintWhenOpeningTheBoard(t *testing.T) {
+	m := newModel(t, firstRunState(), &recorder{}).OpeningBoard()
+	m = press(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter", "enter", "enter")
+	v := view(m)
+	if !strings.Contains(v, "enter open the board") || strings.Contains(v, "enter exit") {
+		t.Fatalf("done screen:\n%s", v)
+	}
+	if strings.Contains(v, "termino board ") {
+		t.Errorf("done screen still tells the user to run termino board:\n%s", v)
+	}
+}

@@ -83,10 +83,11 @@ type Model struct {
 	applying bool
 	result   setupapp.SetupResult
 
-	cancelled bool
-	finished  bool
-	width     int
-	height    int
+	cancelled    bool
+	finished     bool
+	openingBoard bool // setup runs on the way to the board
+	width        int
+	height       int
 }
 
 // New builds the wizard. chrome styles the wizard itself; loadTheme feeds
@@ -108,6 +109,13 @@ func New(state setupapp.SetupState, apply ApplyFunc, loadTheme ThemeLoader, chro
 		m.step = stepMode
 	}
 	m.reset(setupapp.ModeCreate)
+	return m
+}
+
+// OpeningBoard marks a setup that continues into the board when it is
+// done, so the done screen says enter opens the board.
+func (m Model) OpeningBoard() Model {
+	m.openingBoard = true
 	return m
 }
 
@@ -538,7 +546,11 @@ func (m Model) content(cw int) (string, string, string, string) {
 	case stepSummary:
 		return "Review your setup", "Nothing has been written yet.", m.summary(cw), keysSummary
 	default:
-		return "You're all set", "", m.doneBody(cw), "enter exit"
+		hint := "enter exit"
+		if m.openingBoard {
+			hint = "enter open the board"
+		}
+		return "You're all set", "", m.doneBody(cw), hint
 	}
 }
 
@@ -658,6 +670,9 @@ func (m Model) doneBody(cw int) string {
 	}
 	lines = append(lines, "", text.Render("Next steps:"))
 	for _, s := range setupapp.NextSteps() {
+		if m.openingBoard && strings.HasPrefix(s, "termino board ") {
+			continue // the board opens next
+		}
 		lines = append(lines, text.Render("  "+s))
 	}
 	return strings.Join(lines, "\n")
