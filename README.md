@@ -177,6 +177,32 @@ make release-snapshot  # goreleaser build into ./dist without publishing
 make clean
 ```
 
+### Performance
+
+`make bench` runs `internal/bench` against a temporary SQLite database seeded
+with 500 (widget) or 1,000 (board, MCP) tasks. Measured on an Intel i7-1255U,
+Linux, `go test -bench`:
+
+| Measure (TRD 14) | Target | Measured |
+|---|---|---|
+| Widget summary: open DB + query + render, 500 tasks | < 100 ms | ~2.5 ms |
+| Board key + redraw, 1,000 tasks | < 50 ms | ~11 ms |
+| Board reload after a change, 1,000 tasks | — | ~8.7 ms |
+| MCP `get_board` / `list_tasks` / `move_task`, 1,000 tasks | — | ~10.6 / ~10.4 / ~3.8 ms |
+| Binary size (linux/amd64, stripped) | < 30 MB | 13.3 MB |
+
+`TestWidgetSummaryP50WithinTarget` fails the normal test run if the widget
+p50 exceeds 100 ms (skipped with `-short` and under `-race`). Process start-up
+is not included in the in-process numbers.
+
+### Agent evaluation
+
+`eval/prompts.md` holds the PRD 6 evaluation set: 20 natural-language
+requests with the expected MCP calls and database-level pass criteria (target:
+18/20). `go test ./eval` checks the set stays consistent with the server's
+tool names and argument schemas; scoring an agent is a manual run described in
+the file.
+
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which
 builds with GoReleaser and creates a **draft** GitHub release with archives
 and `checksums.txt`; publish the draft to make it visible to `install.sh`.
