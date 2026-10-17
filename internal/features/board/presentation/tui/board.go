@@ -406,6 +406,31 @@ func (m *BoardModel) clampSelection() {
 	}
 }
 
+// selectFirstMatch moves to the first column with a visible card when the
+// selected column has none (e.g. right after applying a filter).
+func (m *BoardModel) selectFirstMatch() {
+	cols := m.board.Columns
+	if m.colIndex < len(cols) && len(m.cards(cols[m.colIndex].ID)) > 0 {
+		return
+	}
+	for i, col := range cols {
+		if len(m.cards(col.ID)) > 0 {
+			m.colIndex = i
+			m.applyFocus()
+			return
+		}
+	}
+}
+
+// prioritySymbol is the theme symbol drawn before a card; medium (the
+// default priority) has none so ordinary cards stay uncluttered.
+func (m BoardModel) prioritySymbol(p taskdomain.Priority) string {
+	if p == "" || p == taskdomain.PriorityMedium {
+		return ""
+	}
+	return sanitize.Line(m.theme.Symbols[string(p)])
+}
+
 // followTo moves the selection to the column a card was moved into and
 // remembers the card so the next reload selects it.
 func (m *BoardModel) followTo(taskID, colID string) {
@@ -544,6 +569,7 @@ func (m BoardModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		m.filterInput.Blur()
 		m.taskIndex = 0
+		m.selectFirstMatch()
 		m.clampSelection()
 		return m, nil
 	case tea.KeyEsc:
@@ -1015,7 +1041,7 @@ func fitBadge(badges []string, nameWidth, width int) string {
 	return badges[len(badges)-1]
 }
 
-// renderCard draws "#N Title @assignee", plus a "working" line when an active
+// renderCard draws "[priority] #N Title @assignee", plus a "working" line when an active
 // agent claimed the task. All task text is sanitized before drawing.
 func (m BoardModel) renderCard(c card, selected bool, width int) string {
 	width = max(width, 4)
@@ -1024,6 +1050,9 @@ func (m BoardModel) renderCard(c card, selected bool, width int) string {
 	if c.task != nil {
 		t := *c.task
 		label = m.TaskRef(t.Number) + " " + sanitize.Line(t.Title)
+		if sym := m.prioritySymbol(t.Priority); sym != "" {
+			label = sym + " " + label
+		}
 		if name := m.assigneeName(t); name != "" {
 			label += " @" + sanitize.Line(name)
 		}

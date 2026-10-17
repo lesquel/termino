@@ -11,7 +11,7 @@ import (
 // previewCard is one sample card on the preview board.
 type previewCard struct {
 	n        string
-	priority string // symbol key: high, critical, medium, low, done
+	priority string // high, critical, low draw a symbol; done only colors the card
 	title    string
 }
 
@@ -62,6 +62,9 @@ func RenderPreview(t *tuikit.Theme, project, key string, width int) string {
 
 func renderCard(t *tuikit.Theme, key string, c previewCard, w int, selected bool) string {
 	sym := t.Symbols[c.priority]
+	if c.priority == "done" {
+		sym = "" // board cards carry no done symbol
+	}
 	color := t.Text
 	switch c.priority {
 	case "critical", "high":
@@ -73,11 +76,15 @@ func renderCard(t *tuikit.Theme, key string, c previewCard, w int, selected bool
 	case "done":
 		color = t.Done
 	}
+	// Same layout as a board card: marker, priority symbol, KEY-N, title.
 	marker := "  "
 	if selected {
-		marker = "▸ "
+		marker = "> "
 	}
-	line := ansi.Truncate(marker+key+"-"+c.n+" "+sym+" "+c.title, w, "…")
+	if sym != "" {
+		sym += " "
+	}
+	line := ansi.Truncate(marker+sym+key+"-"+c.n+" "+c.title, w, "…")
 	style := lipgloss.NewStyle().Foreground(color)
 	if selected {
 		style = style.Background(t.SurfaceAlt).Bold(true)

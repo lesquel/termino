@@ -157,3 +157,26 @@ func TestBoardTaskCreatedShowsFeedback(t *testing.T) {
 		t.Errorf("expected creation feedback:\n%s", view)
 	}
 }
+
+// Cards show the theme's priority symbol (medium has none), as the setup
+// theme preview promises.
+func TestBoardCardsShowPrioritySymbol(t *testing.T) {
+	_, uc := fixture(t, baseTasks(), nil)
+	view := ansi.Strip(newProjectModel(t, uc, boardtui.Services{}, 120, nil).View())
+	if !strings.Contains(view, "▲ WEB-1 Fix login") || !strings.Contains(view, "▼ WEB-2 Write docs") {
+		t.Errorf("expected priority symbols before the card refs:\n%s", view)
+	}
+}
+
+// Applying a filter selects a matching card even when the selected column
+// has none, so enter opens it right away.
+func TestBoardFilterSelectsFirstMatchingColumn(t *testing.T) {
+	tasks := append(baseTasks(), taskdomain.Task{ID: "t3", ProjectID: "proj-1", Number: 3, Title: "Deploy", ColumnID: "col-3", Priority: taskdomain.PriorityMedium, Position: 1})
+	_, uc := fixture(t, tasks, nil)
+	m := newProjectModel(t, uc, boardtui.Services{}, 120, nil)
+	m = press(t, m, "l", "l") // Done column, which holds only t3
+	m = press(t, m, "/", "d", "o", "c", "s", "enter")
+	if got := m.(boardtui.BoardModel).SelectedTaskID(); got != "t2" {
+		t.Fatalf("selected = %q, want t2 (the only match)", got)
+	}
+}

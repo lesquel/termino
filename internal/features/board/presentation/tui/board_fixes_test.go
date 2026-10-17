@@ -14,10 +14,10 @@ func TestBoardSelectedCardHasTextMarkerWithoutColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	_, uc := fixture(t, baseTasks(), nil)
 	view := newLoadedModel(t, uc, boardtui.Services{}, 120).View()
-	if !strings.Contains(view, "> #1 Fix login") {
+	if !strings.Contains(view, "> ▲ #1 Fix login") {
 		t.Errorf("selected card should carry a '>' marker:\n%s", view)
 	}
-	if strings.Contains(view, "> #2") {
+	if strings.Contains(view, "> ▼ #2") {
 		t.Errorf("only the selected card carries the marker:\n%s", view)
 	}
 }
