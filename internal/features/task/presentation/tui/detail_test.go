@@ -1,6 +1,7 @@
 package tui_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -146,5 +147,39 @@ func TestDetailModel_ScrollAndEdit(t *testing.T) {
 	m, _ = m.Update(tasktui.TaskUpdatedMsg{})
 	if strings.Contains(m.View(), "Edit Task") {
 		t.Errorf("a saved edit should leave edit mode:\n%s", m.View())
+	}
+}
+
+func TestDetailModel_ShowsKeyRefAssigneeNameAndLabels(t *testing.T) {
+	var m tea.Model = tasktui.NewDetailModel("task-1", nil, taskapp.Actor{ID: "cli"}, buildTaskTestTheme(), tuikit.DefaultKeyMap()).
+		WithTaskRef(func(n int) string { return fmt.Sprintf("WEB-%d", n) }).
+		WithMemberNames(map[string]string{"m-ana": "ana"})
+	assignee := "m-ana"
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m, _ = m.Update(tasktui.TaskLoadedMsg{Task: taskdomain.Task{
+		ID: "task-1", Number: 5, Title: "Login", AssigneeID: &assignee, Labels: []string{"bug", "ui"},
+	}})
+	view := m.View()
+	for _, want := range []string{"WEB-5 Login", "ana", "bug, ui"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("detail view is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "m-ana") {
+		t.Errorf("detail shows the raw assignee ID:\n%s", view)
+	}
+}
+
+func TestDetailModel_ShowsSavedAfterEdit(t *testing.T) {
+	var m tea.Model = tasktui.NewDetailModel("task-1", nil, taskapp.Actor{ID: "cli"}, buildTaskTestTheme(), tuikit.DefaultKeyMap())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m, _ = m.Update(tasktui.TaskLoadedMsg{Task: taskdomain.Task{ID: "task-1", Number: 1, Title: "T"}})
+	m, _ = m.Update(tasktui.TaskUpdatedMsg{})
+	if !strings.Contains(m.View(), "Saved") {
+		t.Errorf("expected 'Saved' feedback:\n%s", m.View())
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if strings.Contains(m.View(), "Saved") {
+		t.Errorf("'Saved' should clear on the next key:\n%s", m.View())
 	}
 }

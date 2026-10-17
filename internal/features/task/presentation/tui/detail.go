@@ -44,6 +44,9 @@ type DetailModel struct {
 	ready    bool
 	editing  bool
 	columns  map[string]string // column ID → name, for display
+	members  map[string]string // member ID → name, for display
+	ref      func(n int) string
+	flash    string // one-shot feedback such as "Saved", cleared by the next key
 
 	// Edit form fields.
 	titleInput   textinput.Model
@@ -83,6 +86,34 @@ func NewDetailModel(
 func (m DetailModel) WithColumnNames(names map[string]string) DetailModel {
 	m.columns = names
 	return m
+}
+
+// WithMemberNames sets the member names shown instead of member IDs.
+func (m DetailModel) WithMemberNames(names map[string]string) DetailModel {
+	m.members = names
+	return m
+}
+
+// WithTaskRef sets how task numbers are displayed (e.g. KEY-N).
+func (m DetailModel) WithTaskRef(ref func(n int) string) DetailModel {
+	m.ref = ref
+	return m
+}
+
+// taskRef returns the display reference of the loaded task.
+func (m DetailModel) taskRef() string {
+	if m.ref != nil {
+		return m.ref(m.task.Number)
+	}
+	return fmt.Sprintf("#%d", m.task.Number)
+}
+
+// memberName returns the display name of a member, falling back to its ID.
+func (m DetailModel) memberName(id string) string {
+	if name, ok := m.members[id]; ok && name != "" {
+		return name
+	}
+	return id
 }
 
 // columnName returns the display name of a column, falling back to its ID.
@@ -130,6 +161,7 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollY = min(m.scrollY, m.maxScroll())
 
 	case TaskUpdatedMsg:
+		m.flash = "Saved"
 		m.editing = false
 		m.titleInput.Blur()
 		m.descTextarea.Blur()
@@ -147,6 +179,7 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.descTextarea.SetValue(sanitize.Clean(m.task.Description))
 
 	case tea.KeyMsg:
+		m.flash = ""
 		if m.editing {
 			return m.handleEditKey(msg)
 		}
@@ -235,6 +268,9 @@ func (m DetailModel) saveEdit() tea.Cmd {
 	}
 }
 
+// Editing reports whether the edit form is open and consuming keystrokes.
+func (m DetailModel) Editing() bool { return m.editing }
+
 // GoBackMsg signals a return to the previous screen.
 type GoBackMsg struct{}
 
@@ -277,6 +313,9 @@ func (m DetailModel) detailView() string {
 
 	footer := lipgloss.NewStyle().Foreground(m.theme.TextMuted).
 		Render("\ne=edit  ↑↓/jk=scroll  esc=back")
+	if m.flash != "" {
+		footer += "  " + lipgloss.NewStyle().Foreground(m.theme.Success).Bold(true).Render("✓ "+m.flash)
+	}
 	return visible + footer
 }
 
@@ -288,7 +327,7 @@ func (m DetailModel) contentLines() []string {
 	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
 	sectionStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted).MarginTop(1)
 
-	ref := fmt.Sprintf("#%d", t.Number)
+	ref := m.taskRef()
 	lines := []string{
 		titleStyle.Render(ref + " " + sanitize.Line(t.Title)),
 		"",
@@ -296,7 +335,16 @@ func (m DetailModel) contentLines() []string {
 		labelStyle.Render("Column:") + valueStyle.Render(sanitize.Line(m.columnName(t.ColumnID))),
 	}
 	if t.AssigneeID != nil {
-		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(sanitize.Line(*t.AssigneeID)))
+		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(sanitize.Line(m.memberName(*t.AssigneeID))))
+	} else {
+		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render("unassigned"))
+	}
+	if len(t.Labels) > 0 {
+		labels := make([]string, len(t.Labels))
+		for i, l := range t.Labels {
+			labels[i] = sanitize.Line(l)
+		}
+		lines = append(lines, labelStyle.Render("Labels:")+valueStyle.Render(strings.Join(labels, ", ")))
 	}
 	if t.DueDate != nil {
 		lines = append(lines, labelStyle.Render("Due:")+valueStyle.Render(t.DueDate.Format("2006-01-02")))

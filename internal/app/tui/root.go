@@ -12,6 +12,7 @@ import (
 	boardtui "github.com/lesquel/termino/internal/features/board/presentation/tui"
 	memberapp "github.com/lesquel/termino/internal/features/member/application"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
+	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	projecttui "github.com/lesquel/termino/internal/features/project/presentation/tui"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
@@ -86,7 +87,7 @@ func NewRootModel(deps RootDeps) RootModel {
 
 	if deps.Config.CurrentProjectID == "" {
 		m.screen = screenProjectSelector
-		m.selector = projecttui.NewSelectorModel(deps.ProjectUC, th)
+		m.selector = m.newSelector()
 	} else {
 		m.screen = screenBoard
 		m.board = m.newBoard(deps.Config.CurrentProjectID)
@@ -94,6 +95,28 @@ func NewRootModel(deps RootDeps) RootModel {
 	}
 	m.help = NewHelpModel(th, keys)
 	return m
+}
+
+// newSelector builds the project selector, marking the open project.
+func (m RootModel) newSelector() projecttui.SelectorModel {
+	return projecttui.NewSelectorModel(m.deps.ProjectUC, m.theme).WithCurrent(m.projectID)
+}
+
+// project looks up a project by ID; ok is false when it cannot be resolved.
+func (m RootModel) project(id string) (projectdomain.Project, bool) {
+	if m.deps.ProjectUC == nil || id == "" {
+		return projectdomain.Project{}, false
+	}
+	projects, err := m.deps.ProjectUC.ListProjects(context.Background())
+	if err != nil {
+		return projectdomain.Project{}, false
+	}
+	for _, p := range projects {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return projectdomain.Project{}, false
 }
 
 // newBoard builds the board model for projectID wired to the task, member
@@ -113,25 +136,34 @@ func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
 	if m.deps.AgentUC != nil {
 		svc.Agents = m.deps.AgentUC
 	}
-	return boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(svc)
+	board := boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(svc)
+	if p, ok := m.project(projectID); ok {
+		board = board.WithProject(p.Name, p.Key)
+	}
+	return board
 }
 
 // newActivity builds the activity panel for projectID.
 func (m RootModel) newActivity(projectID string) ActivityModel {
 	act := NewActivityModel(projectID, activityLoader(m.deps.TaskUC), m.theme)
 	if m.deps.TaskUC != nil {
-		act = act.WithTaskLabeler(taskLabeler(m.deps.TaskUC))
+		p, _ := m.project(projectID)
+		act = act.WithTaskLabeler(taskLabeler(m.deps.TaskUC, p.Key))
 	}
 	act, _ = sized(act, m.sizeMsg())
 	return act
 }
 
-// taskLabeler resolves a task ID to its "#N" reference.
-func taskLabeler(uc *taskapp.TaskUseCases) TaskLabeler {
+// taskLabeler resolves a task ID to its "KEY-N" reference ("#N" when the
+// project key is unknown).
+func taskLabeler(uc *taskapp.TaskUseCases, projectKey string) TaskLabeler {
 	return func(ctx context.Context, taskID string) string {
 		t, err := uc.FindTaskByID(ctx, taskID)
 		if err != nil {
 			return ""
+		}
+		if projectKey != "" {
+			return fmt.Sprintf("%s-%d", projectKey, t.Number)
 		}
 		return fmt.Sprintf("#%d", t.Number)
 	}
@@ -169,8 +201,16 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.resizeAll()
 
 	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit // always quits, even from a prompt
+		}
 		// While the board has a prompt or picker open, every key is input.
 		if m.screen == screenBoard && m.board.Capturing() {
+			return m.routeToActiveScreen(msg)
+		}
+		// The new-task form and the detail editor are text input: q, p and ?
+		// are typed, not global keys (esc leaves them).
+		if m.screen == screenForm || (m.screen == screenTaskDetail && m.detail.Editing()) {
 			return m.routeToActiveScreen(msg)
 		}
 		// While the selector is filtering, every key is typed into the filter.
@@ -196,7 +236,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "p":
 			if m.screen != screenProjectSelector && m.screen != screenHelp {
 				m.screen = screenProjectSelector
-				m.selector = projecttui.NewSelectorModel(m.deps.ProjectUC, m.theme)
+				m.selector = m.newSelector()
 				m.selector, _ = sized(m.selector, m.sizeMsg())
 				return m, m.selector.Init()
 			}
@@ -225,8 +265,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tasktui.TaskCreatedMsg:
 		m.screen = screenBoard
-		// Reload board (Init would start a second polling ticker).
-		return m, m.board.Reload()
+		// Created reloads the board (Init would start a second polling ticker).
+		var cmd tea.Cmd
+		m.board, cmd = m.board.Created(msg.Task)
+		return m, cmd
 	}
 
 	// Handle 'n' key on board to open form.
@@ -234,9 +276,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "n" {
 			colID := m.currentColumnID()
 			actor := m.actor
+			var creator tasktui.TaskCreator
+			if m.deps.TaskUC != nil {
+				creator = m.deps.TaskUC
+			}
 			m.form = tasktui.NewFormModel(
 				m.projectID, colID,
-				m.deps.TaskUC, actor,
+				creator, actor,
 				m.theme, m.keys,
 			)
 			m.form, _ = sized(m.form, m.sizeMsg())
@@ -248,7 +294,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if taskID != "" {
 				actor := m.actor
 				m.detail = tasktui.NewDetailModel(taskID, m.deps.TaskUC, actor, m.theme, m.keys).
-					WithColumnNames(m.columnNames())
+					WithColumnNames(m.columnNames()).
+					WithMemberNames(m.board.MemberNames()).
+					WithTaskRef(m.board.TaskRef)
 				m.detail, _ = sized(m.detail, m.sizeMsg())
 				m.screen = screenTaskDetail
 				return m, m.detail.Init()

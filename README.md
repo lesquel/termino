@@ -68,11 +68,22 @@ termino connect kiro                        # register the MCP server in Kiro
 | `?` | Help |
 | `q` / `ctrl+c` | Quit |
 
+The header names the project (`termino · Web app (WEB)`) and the active
+filter; cards are shown as `KEY-N`. The footer always lists the main keys and
+shortens itself on narrow terminals. Status messages appear on a fixed row
+under the header and clear after about 3 seconds. An empty board says
+"No tasks yet — press n to create one"; a filter with no results says so.
+
 Moving a card into the last column (Done) plays a short celebration, unless
 motion is off or `NO_COLOR` is set. Columns over their WIP limit are flagged.
 The selected card is marked with `>`, so the selection stays visible without
-color. In the task detail, `e` edits; `ctrl+s` saves (`enter` also saves from
-the title field, and inserts a newline in the description).
+color. The new-task form (`n`) has a title, a priority (`←`/`→`) and
+comma-separated labels; `tab` moves between fields and `enter` creates. The
+task detail shows the assignee, labels and `KEY-N`; `e` edits and `ctrl+s`
+saves (`enter` also saves from the title field, and inserts a newline in the
+description). The project selector (`p`) marks the current project; `q` goes
+back to the board. The built-in `CLI` and `System` members are not offered in
+the assign picker.
 
 ### Connecting an agent (Kiro)
 

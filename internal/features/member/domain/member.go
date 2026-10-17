@@ -23,6 +23,17 @@ type Member struct {
 	CreatedAt time.Time
 }
 
+// Built-in member IDs seeded by migration 004. They attribute changes made
+// through the CLI or by the system and are never assigned work.
+const (
+	SystemCLIID = "cli"
+	SystemID    = "system"
+)
+
+// System reports whether m is a built-in member (CLI or System). Such members
+// keep their rows for attribution but are hidden from assignment pickers.
+func (m Member) System() bool { return m.ID == SystemCLIID || m.ID == SystemID }
+
 // MemberRepository defines the persistence contract for Member aggregates.
 type MemberRepository interface {
 	// Save inserts or updates the given Member.

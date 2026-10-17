@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,23 +22,59 @@ type TaskCreatedMsg struct {
 // FormCancelledMsg is sent when the user cancels the form.
 type FormCancelledMsg struct{}
 
+// TaskCreator is what the form needs to create a task and label it.
+// *taskapp.TaskUseCases satisfies it.
+type TaskCreator interface {
+	CreateTask(ctx context.Context, actor taskapp.Actor, input taskapp.CreateTaskInput) (taskdomain.Task, error)
+	AddLabels(ctx context.Context, actor taskapp.Actor, taskID string, names []string) error
+}
+
+// Only the focused input shows the "> " prompt, so focus is visible as text
+// (NO_COLOR); the priority field shows ◀ ▶ arrows instead.
+const (
+	focusedPrompt = "> "
+	blurredPrompt = "  "
+	maxInputWidth = 60
+)
+
+// formField identifies the focused form field; tab cycles through them.
+type formField int
+
+const (
+	fieldTitle formField = iota
+	fieldPriority
+	fieldLabels
+	fieldCount
+)
+
+// priorities are offered in the priority field, lowest first.
+var priorities = []taskdomain.Priority{
+	taskdomain.PriorityLow,
+	taskdomain.PriorityMedium,
+	taskdomain.PriorityHigh,
+	taskdomain.PriorityCritical,
+}
+
 // FormModel is the inline task-creation form triggered by pressing 'n' on the board.
 type FormModel struct {
-	titleInput textinput.Model
-	theme      *tuikit.Theme
-	keys       tuikit.KeyMap
-	uc         *taskapp.TaskUseCases
-	actor      taskapp.Actor
-	projectID  string
-	columnID   string
-	width      int
-	err        string
+	titleInput  textinput.Model
+	labelsInput textinput.Model
+	priority    int // index into priorities
+	focus       formField
+	theme       *tuikit.Theme
+	keys        tuikit.KeyMap
+	uc          TaskCreator
+	actor       taskapp.Actor
+	projectID   string
+	columnID    string
+	width       int
+	err         string
 }
 
 // NewFormModel creates a FormModel for creating a task in the given column.
 func NewFormModel(
 	projectID, columnID string,
-	uc *taskapp.TaskUseCases,
+	uc TaskCreator,
 	actor taskapp.Actor,
 	theme *tuikit.Theme,
 	keys tuikit.KeyMap,
@@ -47,14 +84,21 @@ func NewFormModel(
 	ti.CharLimit = 200
 	ti.Focus()
 
+	li := textinput.New()
+	li.Prompt = blurredPrompt
+	li.Placeholder = "comma-separated, e.g. bug, ui (optional)"
+	li.CharLimit = 200
+
 	return FormModel{
-		titleInput: ti,
-		theme:      theme,
-		keys:       keys,
-		uc:         uc,
-		actor:      actor,
-		projectID:  projectID,
-		columnID:   columnID,
+		titleInput:  ti,
+		labelsInput: li,
+		priority:    1, // medium
+		theme:       theme,
+		keys:        keys,
+		uc:          uc,
+		actor:       actor,
+		projectID:   projectID,
+		columnID:    columnID,
 	}
 }
 
@@ -68,9 +112,17 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		if m.width > 8 {
-			m.titleInput.Width = m.width - 8
+		// Border, padding and prompt take 10 cells; keep the box on screen.
+		w := min(max(m.width-12, 10), maxInputWidth)
+		m.titleInput.Width = w
+		m.labelsInput.Width = w
+
+	case TaskLoadedMsg:
+		// A failed create comes back as an error-carrying load message.
+		if msg.Err != nil {
+			m.err = msg.Err.Error()
 		}
+		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -80,31 +132,88 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			title := sanitize.Line(m.titleInput.Value())
 			if title == "" {
 				m.err = "Title is required"
-				return m, nil
+				return m.focusOn(fieldTitle)
 			}
 			m.err = ""
 			return m, m.submitForm()
+		case "tab", "down":
+			return m.focusOn((m.focus + 1) % fieldCount)
+		case "shift+tab", "up":
+			return m.focusOn((m.focus + fieldCount - 1) % fieldCount)
+		}
+		if m.focus == fieldPriority {
+			switch msg.String() {
+			case "left", "h", "-":
+				m.priority = max(m.priority-1, 0)
+			case "right", "l", "+", " ":
+				m.priority = min(m.priority+1, len(priorities)-1)
+			}
+			return m, nil
 		}
 	}
 	var cmd tea.Cmd
-	m.titleInput, cmd = m.titleInput.Update(msg)
+	switch m.focus {
+	case fieldTitle:
+		m.titleInput, cmd = m.titleInput.Update(msg)
+	case fieldLabels:
+		m.labelsInput, cmd = m.labelsInput.Update(msg)
+	}
 	return m, cmd
+}
+
+// focusOn moves the keyboard focus to field f.
+func (m FormModel) focusOn(f formField) (tea.Model, tea.Cmd) {
+	m.focus = f
+	m.titleInput.Blur()
+	m.labelsInput.Blur()
+	m.titleInput.Prompt = blurredPrompt
+	m.labelsInput.Prompt = blurredPrompt
+	switch f {
+	case fieldTitle:
+		m.titleInput.Prompt = focusedPrompt
+		return m, m.titleInput.Focus()
+	case fieldLabels:
+		m.labelsInput.Prompt = focusedPrompt
+		return m, m.labelsInput.Focus()
+	}
+	return m, nil
+}
+
+// labelNames splits the labels field on commas, dropping blanks.
+func (m FormModel) labelNames() []string {
+	var names []string
+	for _, raw := range strings.Split(sanitize.Line(m.labelsInput.Value()), ",") {
+		if name := strings.TrimSpace(raw); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (m FormModel) submitForm() tea.Cmd {
 	title := sanitize.Line(m.titleInput.Value())
 	actor := m.actor
 	uc := m.uc
+	labels := m.labelNames()
 	input := taskapp.CreateTaskInput{
 		ProjectID: m.projectID,
 		Title:     title,
 		ColumnID:  m.columnID,
-		Priority:  taskdomain.PriorityMedium,
+		Priority:  priorities[m.priority],
 	}
 	return func() tea.Msg {
+		if uc == nil {
+			return TaskLoadedMsg{Err: fmt.Errorf("create task: tasks are not available")}
+		}
 		task, err := uc.CreateTask(context.Background(), actor, input)
 		if err != nil {
 			return TaskLoadedMsg{Err: fmt.Errorf("create task: %w", err)}
+		}
+		if len(labels) > 0 {
+			if err := uc.AddLabels(context.Background(), actor, task.ID, labels); err != nil {
+				return TaskLoadedMsg{Err: fmt.Errorf("label task: %w", err)}
+			}
+			task.Labels = labels
 		}
 		return TaskCreatedMsg{Task: task}
 	}
@@ -120,6 +229,11 @@ func (m FormModel) View() string {
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 	errStyle := lipgloss.NewStyle().Foreground(m.theme.Danger)
 
+	prio := string(priorities[m.priority])
+	if m.focus == fieldPriority {
+		prio = "◀ " + prio + " ▶"
+	}
+
 	errLine := ""
 	if m.err != "" {
 		errLine = "\n" + errStyle.Render(m.err)
@@ -130,12 +244,16 @@ func (m FormModel) View() string {
 		BorderForeground(m.theme.Border).
 		Padding(1, 2)
 
-	content := fmt.Sprintf("%s\n\n%s\n%s%s\n\n%s",
+	content := fmt.Sprintf("%s\n\n%s\n%s\n\n%s %s\n\n%s\n%s%s\n\n%s",
 		titleStyle.Render("New Task"),
 		labelStyle.Render("Title:"),
 		m.titleInput.View(),
+		labelStyle.Render("Priority:"),
+		prio,
+		labelStyle.Render("Labels:"),
+		m.labelsInput.View(),
 		errLine,
-		labelStyle.Render("enter=create  esc=cancel"),
+		labelStyle.Render("tab=next field  ←/→=priority  enter=create  esc=cancel"),
 	)
 	return boxStyle.Render(content)
 }

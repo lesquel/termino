@@ -29,6 +29,10 @@ const (
 	// celebrationFrames × celebrationInterval stays under 1 s (TRD 10.5).
 	celebrationFrames   = 6
 	celebrationInterval = 120 * time.Millisecond
+
+	// statusTTL is how long a status message stays before the poll tick
+	// clears it.
+	statusTTL = 3 * time.Second
 )
 
 // BoardLoadedMsg carries a refreshed board from an async load.
@@ -122,10 +126,15 @@ type BoardModel struct {
 
 	status      string
 	statusErr   bool
+	statusAt    time.Time
+	now         func() time.Time
 	celebration int // remaining animation frames
 	celebrated  string
 
 	focusTaskID string // card to select once the next reload lands
+
+	projectName string
+	projectKey  string
 }
 
 // NewBoardModel creates a new BoardModel for the given project.
@@ -148,7 +157,42 @@ func NewBoardModel(
 		keys:        keys,
 		tasks:       make(map[string][]taskdomain.Task),
 		filterInput: ti,
+		now:         time.Now,
 	}
+}
+
+// WithProject returns a copy of the model that shows the project's name in
+// its header and refers to tasks as KEY-N.
+func (m BoardModel) WithProject(name, key string) BoardModel {
+	m.projectName = name
+	m.projectKey = key
+	return m
+}
+
+// WithClock returns a copy of the model that reads time from now (tests).
+func (m BoardModel) WithClock(now func() time.Time) BoardModel {
+	m.now = now
+	return m
+}
+
+// TaskRef returns the display reference of task number n: KEY-N when the
+// project key is known, otherwise #N.
+func (m BoardModel) TaskRef(n int) string {
+	if m.projectKey != "" {
+		return fmt.Sprintf("%s-%d", m.projectKey, n)
+	}
+	return fmt.Sprintf("#%d", n)
+}
+
+// MemberNames returns the member ID → name map of the last load.
+func (m BoardModel) MemberNames() map[string]string { return m.members }
+
+// Created confirms a task created outside the board (the new-task form) and
+// selects it once the next reload lands.
+func (m BoardModel) Created(t taskdomain.Task) (BoardModel, tea.Cmd) {
+	m.setStatus("Created "+m.TaskRef(t.Number)+" "+sanitize.Line(t.Title), false)
+	m.focusTaskID = t.ID
+	return m, m.Reload()
 }
 
 // WithServices returns a copy of the model wired to the given collaborators.
@@ -238,6 +282,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clampSelection()
 
 	case tuikit.RefreshMsg:
+		if m.status != "" && m.now().Sub(m.statusAt) >= statusTTL {
+			m.status, m.statusErr = "", false
+		}
 		return m, tea.Batch(
 			checkDataVersion(m.db, m.dataVer),
 			tickPoll(),
@@ -280,17 +327,17 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m BoardModel) handleActionResult(msg actionResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.setStatus(fmt.Sprintf("Could not update #%d: %v", msg.task.Number, msg.err), true)
+		m.setStatus(fmt.Sprintf("Could not update %s: %v", m.TaskRef(msg.task.Number), msg.err), true)
 		return m, nil
 	}
 	if msg.toID != "" {
 		m.followTo(msg.task.ID, msg.toID)
 	}
 	if !msg.done {
-		m.setStatus(fmt.Sprintf("#%d %s %s", msg.task.Number, msg.verb, sanitize.Line(msg.to)), false)
+		m.setStatus(fmt.Sprintf("%s %s %s", m.TaskRef(msg.task.Number), msg.verb, sanitize.Line(msg.to)), false)
 		return m, m.Reload()
 	}
-	m.celebrated = fmt.Sprintf("#%d done", msg.task.Number)
+	m.celebrated = m.TaskRef(msg.task.Number) + " done"
 	if !m.svc.Motion {
 		// Motion disabled (config or NO_COLOR): a static, text-only confirmation.
 		m.setStatus(m.doneSymbol()+" "+m.celebrated+": "+sanitize.Line(msg.task.Title), false)
@@ -304,6 +351,7 @@ func (m BoardModel) handleActionResult(msg actionResultMsg) (tea.Model, tea.Cmd)
 func (m *BoardModel) setStatus(s string, isErr bool) {
 	m.status = s
 	m.statusErr = isErr
+	m.statusAt = m.now()
 }
 
 // Capturing reports whether the board is consuming keystrokes (a prompt or
@@ -595,6 +643,9 @@ func (m BoardModel) openAssignPicker() (tea.Model, tea.Cmd) {
 		}
 		opts := []pickerOption{{label: "Unassigned"}}
 		for _, mem := range list {
+			if mem.System() {
+				continue // built-in attribution members never take work
+			}
 			opts = append(opts, pickerOption{
 				label: fmt.Sprintf("%s (%s)", sanitize.Line(mem.Name), mem.Kind),
 				value: mem.ID,
@@ -666,7 +717,9 @@ func (m BoardModel) ColIndex() int { return m.colIndex }
 // Board returns the current board state (read-only access for root model).
 func (m BoardModel) Board() boarddomain.Board { return m.board }
 
-// View implements tea.Model.
+// View implements tea.Model. The layout is fixed: a header line, one
+// status row (blank when idle, so messages never shift the board), the
+// columns, and a footer with the available keys or the open prompt.
 func (m BoardModel) View() string {
 	if !m.ready {
 		return lipgloss.NewStyle().
@@ -679,47 +732,134 @@ func (m BoardModel) View() string {
 	} else {
 		body = m.fullBoardView()
 	}
-	parts := make([]string, 0, 4)
-	if top := m.topBar(); top != "" {
-		parts = append(parts, top)
+	bottom := m.bottomBar()
+	if bottom == "" {
+		bottom = m.footer()
 	}
-	parts = append(parts, body)
-	if bottom := m.bottomBar(); bottom != "" {
-		parts = append(parts, bottom)
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	return lipgloss.JoinVertical(lipgloss.Left, m.header(), m.statusRow(), body, bottom)
 }
 
-// topBar shows the active filter, the celebration and the last status.
-func (m BoardModel) topBar() string {
-	var lines []string
-	if m.filterQuery != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(m.theme.Accent).
-			Render("Filter: "+m.filterQuery+"  (esc clears)"))
+// header shows the project and the active filter.
+func (m BoardModel) header() string {
+	title := "termino"
+	if m.projectName != "" {
+		title += " · " + sanitize.Line(m.projectName)
+		if m.projectKey != "" {
+			title += " (" + m.projectKey + ")"
+		}
 	}
-	if m.celebration > 0 {
+	out := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true).Render(title)
+	if m.filterQuery != "" {
+		out += lipgloss.NewStyle().Foreground(m.theme.Warning).
+			Render("  Filter: " + m.filterQuery + "  (esc clears)")
+	}
+	return m.fit(out)
+}
+
+// statusRow is always one line: the celebration, the last status, an
+// empty-state hint, or a blank line.
+func (m BoardModel) statusRow() string {
+	var line string
+	switch {
+	case m.celebration > 0:
 		sparkles := []string{"✦", "✧", "★", "✧"}
 		s := sparkles[m.celebration%len(sparkles)]
-		lines = append(lines, lipgloss.NewStyle().Foreground(m.theme.Success).Bold(true).
-			Render(fmt.Sprintf("%s %s %s! %s", s, m.doneSymbol(), m.celebrated, s)))
-	}
-	if m.status != "" {
+		line = lipgloss.NewStyle().Foreground(m.theme.Success).Bold(true).
+			Render(fmt.Sprintf("%s %s %s! %s", s, m.doneSymbol(), m.celebrated, s))
+	case m.status != "":
 		fg := m.theme.TextMuted
 		if m.statusErr {
 			fg = m.theme.Danger
 		}
-		lines = append(lines, lipgloss.NewStyle().Foreground(fg).Render(m.status))
+		line = lipgloss.NewStyle().Foreground(fg).Render(m.status)
+	case m.visibleCount() == 0 && len(m.board.Columns) > 0:
+		hint := "No tasks yet — press n to create one"
+		if !m.filter.Empty() {
+			hint = "No matches — press esc to clear the filter"
+		}
+		line = lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(hint)
 	}
-	return strings.Join(lines, "\n")
+	if line == "" {
+		return " "
+	}
+	return m.fit(line)
 }
 
-// bottomBar renders the open prompt or picker.
+// visibleCount is the number of cards shown across all columns.
+func (m BoardModel) visibleCount() int {
+	n := 0
+	for _, col := range m.board.Columns {
+		n += len(m.cards(col.ID))
+	}
+	return n
+}
+
+// fit truncates a rendered line to the board width, when known.
+func (m BoardModel) fit(s string) string {
+	if m.width <= 0 {
+		return s
+	}
+	return ansi.Truncate(s, m.width, "…")
+}
+
+// footerHint is one "key action" pair of the footer.
+type footerHint struct{ key, desc string }
+
+// footerHints are listed most useful first; the footer keeps as many as fit
+// and always ends with help and quit.
+var footerHints = []footerHint{
+	{"n", "new"},
+	{"enter", "open"},
+	{"/", "filter"},
+	{"H/L", "move"},
+	{"a", "assign"},
+	{"m", "move to"},
+	{"d", "delete"},
+	{"p", "projects"},
+	{"hjkl", "navigate"},
+}
+
+var footerTail = []footerHint{{"?", "help"}, {"q", "quit"}}
+
+// footer renders the key hints that fit the board width. Text carries the
+// meaning, so it reads the same under NO_COLOR.
+func (m BoardModel) footer() string {
+	const sep = "  "
+	width := m.width
+	if width <= 0 {
+		width = minBoardWidth
+	}
+	hintWidth := func(h footerHint) int { return ansi.StringWidth(h.key) + 1 + ansi.StringWidth(h.desc) }
+	used := 0
+	for _, h := range footerTail {
+		used += hintWidth(h) + len(sep)
+	}
+	var chosen []footerHint
+	for _, h := range footerHints {
+		if used+hintWidth(h)+len(sep) > width {
+			break
+		}
+		chosen = append(chosen, h)
+		used += hintWidth(h) + len(sep)
+	}
+	chosen = append(chosen, footerTail...)
+
+	keyStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
+	parts := make([]string, 0, len(chosen))
+	for _, h := range chosen {
+		parts = append(parts, keyStyle.Render(h.key)+" "+descStyle.Render(h.desc))
+	}
+	return ansi.Truncate(strings.Join(parts, sep), width, "…")
+}
+
+// bottomBar renders the open prompt or picker, or "" in normal mode.
 func (m BoardModel) bottomBar() string {
 	box := lipgloss.NewStyle().Border(m.theme.BorderStyle).BorderForeground(m.theme.Accent).Padding(0, 1)
-	title := fmt.Sprintf("#%d %s", m.target.Number, sanitize.Line(m.target.Title))
+	title := m.TaskRef(m.target.Number) + " " + sanitize.Line(m.target.Title)
 	switch m.mode {
 	case modeFilter:
-		return box.Render("Filter cards\n" + m.filterInput.View())
+		return box.Render("Filter cards\n" + m.filterInput.View() + "\nenter=apply  esc=cancel")
 	case modeConfirmDelete:
 		return box.BorderForeground(m.theme.Danger).
 			Render(fmt.Sprintf("Delete %s? (y/N)", title))
@@ -848,7 +988,11 @@ func (m BoardModel) renderColumn(col boarddomain.Column, colIdx int, width int) 
 
 	body := strings.Join(taskLines, "\n")
 	if body == "" {
-		body = lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("  (empty)")
+		empty := "  (empty)"
+		if !m.filter.Empty() {
+			empty = "  (no matches)"
+		}
+		body = lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(empty)
 	}
 
 	colStyle := lipgloss.NewStyle().
@@ -879,7 +1023,7 @@ func (m BoardModel) renderCard(c card, selected bool, width int) string {
 	working := ""
 	if c.task != nil {
 		t := *c.task
-		label = fmt.Sprintf("#%d %s", t.Number, sanitize.Line(t.Title))
+		label = m.TaskRef(t.Number) + " " + sanitize.Line(t.Title)
 		if name := m.assigneeName(t); name != "" {
 			label += " @" + sanitize.Line(name)
 		}

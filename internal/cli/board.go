@@ -4,7 +4,6 @@ import (
 	"context"
 
 	apptui "github.com/lesquel/termino/internal/app/tui"
-	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/spf13/cobra"
 )
 
@@ -107,9 +106,4 @@ func closedChan() <-chan struct{} {
 	c := make(chan struct{})
 	close(c)
 	return c
-}
-
-// currentProjectName returns the current project name, or empty string.
-func currentProjectName(cfg *config.Config) string {
-	return cfg.CurrentProjectID
 }

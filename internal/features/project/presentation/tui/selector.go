@@ -3,8 +3,8 @@ package tui
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,9 +18,16 @@ import (
 // projectItem wraps a domain Project for the bubbles/list component.
 type projectItem struct {
 	project projectdomain.Project
+	current bool
 }
 
-func (i projectItem) Title() string       { return sanitize.Line(i.project.Name) }
+// Title marks the current project with text, so it survives NO_COLOR.
+func (i projectItem) Title() string {
+	if i.current {
+		return sanitize.Line(i.project.Name) + "  (current)"
+	}
+	return sanitize.Line(i.project.Name)
+}
 func (i projectItem) Description() string { return i.project.Key }
 func (i projectItem) FilterValue() string { return i.project.Name + " " + i.project.Key }
 
@@ -37,12 +44,13 @@ type ProjectSelectedMsg struct {
 
 // SelectorModel is the Bubble Tea model for the project selection screen.
 type SelectorModel struct {
-	list   list.Model
-	theme  *tuikit.Theme
-	uc     *projectapp.ProjectUseCases
-	width  int
-	height int
-	ready  bool
+	list    list.Model
+	theme   *tuikit.Theme
+	uc      *projectapp.ProjectUseCases
+	current string // ID of the open project, "" when none
+	width   int
+	height  int
+	ready   bool
 }
 
 // NewSelectorModel creates a new SelectorModel.
@@ -62,12 +70,24 @@ func NewSelectorModel(uc *projectapp.ProjectUseCases, theme *tuikit.Theme) Selec
 		Bold(true)
 	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(theme.Accent)
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(theme.Accent)
+	// The root model owns q; esc only clears a filter here, never quits.
+	l.KeyMap.Quit = key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit"))
 
 	return SelectorModel{
 		list:  l,
 		theme: theme,
 		uc:    uc,
 	}
+}
+
+// WithCurrent marks the open project and makes q read "back", since q then
+// returns to its board instead of quitting.
+func (m SelectorModel) WithCurrent(projectID string) SelectorModel {
+	m.current = projectID
+	if projectID != "" {
+		m.list.KeyMap.Quit.SetHelp("q", "back")
+	}
+	return m
 }
 
 // Init implements tea.Model.
@@ -101,10 +121,16 @@ func (m SelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		items := make([]list.Item, 0, len(msg.Projects))
-		for _, p := range msg.Projects {
-			items = append(items, projectItem{project: p})
+		selected := 0
+		for i, p := range msg.Projects {
+			current := p.ID == m.current
+			if current {
+				selected = i
+			}
+			items = append(items, projectItem{project: p, current: current})
 		}
 		m.list.SetItems(items)
+		m.list.Select(selected)
 		m.ready = true
 
 	case tea.KeyMsg:
@@ -138,7 +164,7 @@ func (m SelectorModel) View() string {
 	if len(m.list.Items()) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(m.theme.TextMuted).
-			Render(fmt.Sprintf("No projects found.\n\nRun `termino project new` to create one."))
+			Render("No projects yet.\n\nRun `termino setup` to create your first project,\nthen open the board again with `termino`.")
 	}
 	return m.list.View()
 }
