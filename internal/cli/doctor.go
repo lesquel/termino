@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	kiroconnector "github.com/lesquel/termino/internal/features/connector/infrastructure/kiro"
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/lesquel/termino/internal/platform/sqlite"
+	"github.com/spf13/cobra"
 )
 
 // newDoctorCmd returns `termino doctor`.

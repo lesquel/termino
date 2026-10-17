@@ -7,10 +7,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lesquel/termino/internal/tuikit"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
+	"github.com/lesquel/termino/internal/tuikit"
 )
 
 // TaskCreatedMsg is sent when a new task has been successfully created.

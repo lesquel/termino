@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	boardinfra "github.com/lesquel/termino/internal/features/board/infrastructure"
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
+	boardinfra "github.com/lesquel/termino/internal/features/board/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
-	tasktui "github.com/lesquel/termino/internal/features/task/presentation/tui"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	tasktui "github.com/lesquel/termino/internal/features/task/presentation/tui"
 	"github.com/lesquel/termino/internal/tuikit"
 )
 

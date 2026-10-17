@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	taskinfra "github.com/lesquel/termino/internal/features/task/infrastructure"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	taskinfra "github.com/lesquel/termino/internal/features/task/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

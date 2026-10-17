@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	agentinfra "github.com/lesquel/termino/internal/features/agent/infrastructure"
 	agentdomain "github.com/lesquel/termino/internal/features/agent/domain"
+	agentinfra "github.com/lesquel/termino/internal/features/agent/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

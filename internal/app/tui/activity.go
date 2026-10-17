@@ -104,7 +104,7 @@ func (m ActivityModel) renderPanel() string {
 	panelStyle := lipgloss.NewStyle().
 		Border(m.theme.BorderStyle).
 		BorderForeground(m.theme.Border).
-		Width(activityPanelWidth - 2).
+		Width(activityPanelWidth-2).
 		Padding(0, 1)
 
 	headerStyle := lipgloss.NewStyle().

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	memberinfra "github.com/lesquel/termino/internal/features/member/infrastructure"
 	memberdomain "github.com/lesquel/termino/internal/features/member/domain"
+	memberinfra "github.com/lesquel/termino/internal/features/member/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

@@ -11,10 +11,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lesquel/termino/internal/tuikit"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
+	"github.com/lesquel/termino/internal/tuikit"
 )
 
 // TaskLoadedMsg carries the full task data loaded asynchronously.
@@ -45,9 +45,9 @@ type DetailModel struct {
 	editing  bool
 
 	// Edit form fields.
-	titleInput    textinput.Model
-	descTextarea  textarea.Model
-	editFocused   int // 0=title, 1=desc
+	titleInput   textinput.Model
+	descTextarea textarea.Model
+	editFocused  int // 0=title, 1=desc
 }
 
 // NewDetailModel creates a DetailModel for the given task ID.

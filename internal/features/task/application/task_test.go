@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
+	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	"github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
-	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	"github.com/lesquel/termino/internal/platform/events"
 )
 

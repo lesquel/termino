@@ -32,11 +32,11 @@ func newProjectCmd() *cobra.Command {
 // newProjectNewCmd returns `termino project new`.
 func newProjectNewCmd() *cobra.Command {
 	var (
-		name          string
-		key           string
-		methodology   string
-		path          string
-		associatePwd  bool
+		name         string
+		key          string
+		methodology  string
+		path         string
+		associatePwd bool
 	)
 
 	cmd := &cobra.Command{

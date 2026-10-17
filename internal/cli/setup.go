@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
 	kiroconnector "github.com/lesquel/termino/internal/features/connector/infrastructure/kiro"
 	setupapp "github.com/lesquel/termino/internal/features/setup/application"
+	"github.com/spf13/cobra"
 )
 
 // newSetupCmd returns `termino setup`.

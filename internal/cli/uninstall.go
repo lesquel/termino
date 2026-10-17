@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
 	"github.com/lesquel/termino/internal/platform/config"
+	"github.com/spf13/cobra"
 )
 
 // newUninstallCmd returns `termino uninstall [--purge]`.

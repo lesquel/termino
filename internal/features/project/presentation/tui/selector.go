@@ -11,8 +11,8 @@ import (
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	"github.com/lesquel/termino/internal/platform/config"
-	"github.com/lesquel/termino/internal/tuikit"
 	"github.com/lesquel/termino/internal/platform/sanitize"
+	"github.com/lesquel/termino/internal/tuikit"
 )
 
 // projectItem wraps a domain Project for the bubbles/list component.

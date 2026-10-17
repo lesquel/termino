@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	projectinfra "github.com/lesquel/termino/internal/features/project/infrastructure"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
+	projectinfra "github.com/lesquel/termino/internal/features/project/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

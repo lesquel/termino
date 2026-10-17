@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	sprintinfra "github.com/lesquel/termino/internal/features/sprint/infrastructure"
 	sprintdomain "github.com/lesquel/termino/internal/features/sprint/domain"
+	sprintinfra "github.com/lesquel/termino/internal/features/sprint/infrastructure"
 	"github.com/lesquel/termino/internal/platform/sqlite"
 )
 

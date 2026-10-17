@@ -6,16 +6,16 @@ import (
 	"sync"
 	"time"
 
-	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
+	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 )
 
 // --- in-memory project repository ---
 
 type inMemoryProjectRepo struct {
-	mu       sync.RWMutex
-	byID     map[string]projectdomain.Project
-	byKey    map[string]projectdomain.Project
+	mu    sync.RWMutex
+	byID  map[string]projectdomain.Project
+	byKey map[string]projectdomain.Project
 }
 
 func newInMemoryProjectRepo() *inMemoryProjectRepo {

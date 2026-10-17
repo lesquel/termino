@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	sharedomain "github.com/lesquel/termino/internal/domain"
 	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
-	sharedomain "github.com/lesquel/termino/internal/domain"
 	"github.com/lesquel/termino/internal/platform/config"
 )
 
