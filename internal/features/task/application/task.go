@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	sharedomain "github.com/lesquel/termino/internal/domain"
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
+	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/events"
 )
@@ -24,9 +25,9 @@ var ErrConfirmRequired = errors.New("deletion requires explicit confirmation")
 
 // TaskMoved is published after a task changes columns.
 type TaskMoved struct {
-	TaskID         string
-	FromColumnID   string
-	ToColumnID     string
+	TaskID       string
+	FromColumnID string
+	ToColumnID   string
 }
 
 // Type implements events.Event.
@@ -67,13 +68,20 @@ type UpdateTaskInput struct {
 	Points      *int
 }
 
+// MethodologyResolver returns the workflow strategy of a project, so MoveTask
+// can enforce Methodology.CanMove.
+type MethodologyResolver interface {
+	MethodologyFor(ctx context.Context, projectID string) (projectdomain.Methodology, error)
+}
+
 // TaskUseCases groups all task-related use cases.
 type TaskUseCases struct {
-	tasks      taskdomain.TaskRepository
-	comments   taskdomain.CommentRepository
-	activities taskdomain.ActivityRepository
-	board      boarddomain.BoardRepository
-	bus        *events.Bus
+	tasks         taskdomain.TaskRepository
+	comments      taskdomain.CommentRepository
+	activities    taskdomain.ActivityRepository
+	board         boarddomain.BoardRepository
+	bus           *events.Bus
+	methodologies MethodologyResolver
 }
 
 // NewTaskUseCases constructs a TaskUseCases instance.
@@ -91,6 +99,13 @@ func NewTaskUseCases(
 		board:      board,
 		bus:        bus,
 	}
+}
+
+// WithMethodologies makes MoveTask consult the project's methodology before
+// every move. Without a resolver only the WIP limit is checked.
+func (uc *TaskUseCases) WithMethodologies(r MethodologyResolver) *TaskUseCases {
+	uc.methodologies = r
+	return uc
 }
 
 // CreateTask assigns the next number, sets the fractional position at the end
@@ -229,6 +244,9 @@ func (uc *TaskUseCases) MoveTask(
 	if err := boarddomain.CanAddToColumn(board, col); err != nil {
 		return err
 	}
+	if err := uc.checkMethodology(ctx, t, col); err != nil {
+		return err
+	}
 
 	fromColumnID := t.ColumnID
 	t.ColumnID = targetColumnID
@@ -244,6 +262,32 @@ func (uc *TaskUseCases) MoveTask(
 	}
 	uc.bus.Publish(ctx, TaskMoved{TaskID: taskID, FromColumnID: fromColumnID, ToColumnID: targetColumnID})
 	return nil
+}
+
+// checkMethodology applies the project's Methodology.CanMove rule.
+func (uc *TaskUseCases) checkMethodology(ctx context.Context, t taskdomain.Task, to boarddomain.Column) error {
+	if uc.methodologies == nil {
+		return nil
+	}
+	m, err := uc.methodologies.MethodologyFor(ctx, t.ProjectID)
+	if err != nil {
+		return fmt.Errorf("resolve methodology: %w", err)
+	}
+	cols, err := uc.board.ListColumns(ctx, t.ProjectID)
+	if err != nil {
+		return fmt.Errorf("list columns: %w", err)
+	}
+	refs := make([]projectdomain.Column, 0, len(cols))
+	for _, c := range cols {
+		refs = append(refs, projectColumn(c))
+	}
+	return m.CanMove(projectdomain.Task{ID: t.ID, ColumnID: t.ColumnID}, projectColumn(to), refs)
+}
+
+// projectColumn converts a board column to the project domain's minimal
+// reference type used by Methodology.
+func projectColumn(c boarddomain.Column) projectdomain.Column {
+	return projectdomain.Column{ID: c.ID, Name: c.Name, Position: c.Position, WIPLimit: c.WIPLimit}
 }
 
 // AssignTask sets or clears the assignee of a task and records an 'assigned' activity.

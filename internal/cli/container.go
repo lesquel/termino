@@ -81,6 +81,11 @@ func (c *Container) DB() (*sql.DB, error) {
 func (c *Container) ProjectUseCases() (*projectapp.ProjectUseCases, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.projectUseCasesLocked()
+}
+
+// projectUseCasesLocked wires the project use cases. Must be called with c.mu held.
+func (c *Container) projectUseCasesLocked() (*projectapp.ProjectUseCases, error) {
 	if c.projectUC == nil {
 		db, err := c.dbLocked()
 		if err != nil {
@@ -105,6 +110,11 @@ func (c *Container) TaskUseCases() (*taskapp.TaskUseCases, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Every move honours the project's Methodology.CanMove rule.
+		projectUC, err := c.projectUseCasesLocked()
+		if err != nil {
+			return nil, err
+		}
 		bus := &events.Bus{}
 		c.taskUC = taskapp.NewTaskUseCases(
 			taskinfra.NewTaskRepository(db),
@@ -112,7 +122,7 @@ func (c *Container) TaskUseCases() (*taskapp.TaskUseCases, error) {
 			taskinfra.NewActivityRepository(db),
 			boardinfra.NewBoardRepository(db),
 			bus,
-		)
+		).WithMethodologies(projectUC)
 	}
 	return c.taskUC, nil
 }

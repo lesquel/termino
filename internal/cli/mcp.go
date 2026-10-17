@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"strings"
 
 	appmcp "github.com/lesquel/termino/internal/app/mcp"
@@ -42,6 +43,13 @@ func newMCPCmd() *cobra.Command {
 				return err
 			}
 
+			// A task moved to Done by an agent also checks its source box.
+			syncSvc, err := newSyncService()
+			if err != nil {
+				return err
+			}
+			sources := taskSources()
+
 			deps := appmcp.Deps{
 				ProjectUC:     projectUC,
 				BoardUC:       boardUC,
@@ -51,6 +59,9 @@ func newMCPCmd() *cobra.Command {
 				Logger:        logging.Logger,
 				ActorOverride: strings.TrimSpace(actor),
 				ReadOnly:      readOnly,
+				OnTaskDone: func(ctx context.Context, taskID string) error {
+					return syncSvc.ExportTask(ctx, taskID, sources)
+				},
 			}
 
 			s := appmcp.NewServer(deps)

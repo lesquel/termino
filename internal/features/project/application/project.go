@@ -134,3 +134,13 @@ func (uc *ProjectUseCases) ArchiveProject(
 ) error {
 	return uc.projects.Archive(ctx, projectID, time.Now().UTC())
 }
+
+// MethodologyFor returns the workflow strategy of the given project. The task
+// feature uses it to enforce Methodology.CanMove on every move.
+func (uc *ProjectUseCases) MethodologyFor(ctx context.Context, projectID string) (projectdomain.Methodology, error) {
+	p, err := uc.projects.FindByID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("find project: %w", err)
+	}
+	return projectdomain.MethodologyFor(p.Methodology), nil
+}

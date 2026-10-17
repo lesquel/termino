@@ -39,4 +39,7 @@ type Connector interface {
 	Connect(scope Scope) ([]InstalledItem, error)
 	// Disconnect removes all previously installed items.
 	Disconnect(items []InstalledItem) error
+	// Owns reports whether item was installed by this connector, so that
+	// disconnecting one agent never touches another integration's items.
+	Owns(item InstalledItem) bool
 }

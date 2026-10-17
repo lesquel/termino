@@ -11,19 +11,19 @@ import (
 	"strconv"
 	"strings"
 
-	mcplib "github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	sharedomain "github.com/lesquel/termino/internal/domain"
-	boardapp "github.com/lesquel/termino/internal/features/board/application"
-	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	agentapp "github.com/lesquel/termino/internal/features/agent/application"
 	agentdomain "github.com/lesquel/termino/internal/features/agent/domain"
+	boardapp "github.com/lesquel/termino/internal/features/board/application"
+	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	memberapp "github.com/lesquel/termino/internal/features/member/application"
 	memberdomain "github.com/lesquel/termino/internal/features/member/domain"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // Deps holds the application dependencies for the MCP server.
@@ -39,6 +39,11 @@ type Deps struct {
 	ActorOverride string
 	// ReadOnly disables the 9 write tools when true.
 	ReadOnly bool
+	// OnTaskDone, when set, runs after a task lands in its project's Done
+	// column (complete_task, or move_task to Done) — e.g. to check the box in
+	// the task's source file. Its error is logged, never returned to the agent:
+	// the move itself already succeeded.
+	OnTaskDone func(ctx context.Context, taskID string) error
 }
 
 // NewServer creates and configures the MCP server with all 13 tools registered.
@@ -146,6 +151,33 @@ func cleanTitle(raw string) (string, error) {
 		return "", fmt.Errorf("title is empty after removing control characters")
 	}
 	return title, nil
+}
+
+// isDoneColumn reports whether columnID is the Done column of the task's project.
+func isDoneColumn(ctx context.Context, deps Deps, taskID, columnID string) bool {
+	if deps.OnTaskDone == nil || deps.BoardUC == nil {
+		return false
+	}
+	t, err := deps.TaskUC.FindTaskByID(ctx, taskID)
+	if err != nil {
+		return false
+	}
+	board, err := deps.BoardUC.GetBoard(ctx, t.ProjectID)
+	if err != nil {
+		return false
+	}
+	done, ok := boarddomain.DoneColumn(board.Columns)
+	return ok && done.ID == columnID
+}
+
+// notifyDone runs the OnTaskDone hook, logging (never returning) its error.
+func notifyDone(ctx context.Context, deps Deps, taskID string) {
+	if deps.OnTaskDone == nil {
+		return
+	}
+	if err := deps.OnTaskDone(ctx, taskID); err != nil && deps.Logger != nil {
+		deps.Logger.Warn("mcp: task done hook failed", "task", taskID, "err", err)
+	}
 }
 
 func updatePresence(ctx context.Context, deps Deps, actor sharedomain.Actor) {
@@ -450,6 +482,9 @@ func makeMoveTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err := deps.TaskUC.MoveTask(ctx, actor, taskID, colID, position); err != nil {
 			return errResult(err)
 		}
+		if isDoneColumn(ctx, deps, taskID, colID) {
+			notifyDone(ctx, deps, taskID)
+		}
 		updatePresence(ctx, deps, actor)
 		return textResult(map[string]string{"status": "moved", "task_id": taskID})
 	}
@@ -546,6 +581,7 @@ func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err := deps.TaskUC.MoveTask(ctx, actor, taskID, doneCol, 0); err != nil {
 			return errResult(err)
 		}
+		notifyDone(ctx, deps, taskID)
 		updatePresence(ctx, deps, actor)
 		return textResult(map[string]string{"status": "completed", "task_id": taskID, "column_id": doneCol})
 	}

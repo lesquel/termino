@@ -43,10 +43,13 @@ func taskSources() []tasksourcedomain.TaskSource {
 }
 
 // fileLogger routes slog output to the termino log file so background sync
-// never writes to stdout (TUI, stdio) and returns that logger.
+// never writes to stdout (TUI, stdio) and returns that logger. When the log
+// file cannot be opened, logs are discarded rather than sent to the terminal.
 func fileLogger() *slog.Logger {
 	if err := logging.Init(filepath.Join(config.StateDir(), "termino.log")); err != nil || logging.Logger == nil {
-		return slog.New(slog.DiscardHandler)
+		discard := slog.New(slog.DiscardHandler)
+		slog.SetDefault(discard)
+		return discard
 	}
 	return logging.Logger
 }

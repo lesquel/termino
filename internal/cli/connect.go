@@ -2,11 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/spf13/cobra"
 	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
 	kiroconnector "github.com/lesquel/termino/internal/features/connector/infrastructure/kiro"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
+	"github.com/spf13/cobra"
 )
 
 // newConnectCmd returns `termino connect <agent>` and `termino disconnect <agent>`.
@@ -85,17 +86,19 @@ func runDisconnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Build the InstalledItem list for this connector.
+	// Only this connector's own items: other integrations (shell widget,
+	// other agents) stay installed and recorded.
 	var connItems []connectordomain.InstalledItem
 	for _, item := range items {
-		// Heuristic: items associated with the agent have paths containing
-		// the agent name or the known markers.
-		connItems = append(connItems, connectordomain.InstalledItem{
+		ci := connectordomain.InstalledItem{
 			Kind:       connectordomain.ItemKind(item.Kind),
 			Path:       item.Path,
 			Marker:     item.Marker,
 			BackupPath: item.BackupPath,
-		})
+		}
+		if conn.Owns(ci) {
+			connItems = append(connItems, ci)
+		}
 	}
 
 	if err := conn.Disconnect(connItems); err != nil {
@@ -115,11 +118,16 @@ func runDisconnect(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveConnector returns the Connector for the named agent.
+// resolveConnector returns the Connector for the named agent. The working
+// directory is the project that receives project-level files (Kiro steering).
 func resolveConnector(agent string) connectordomain.Connector {
 	switch agent {
 	case "kiro":
-		return kiroconnector.New()
+		conn := kiroconnector.New()
+		if cwd, err := os.Getwd(); err == nil {
+			conn.WithProjectRoot(cwd)
+		}
+		return conn
 	default:
 		return nil
 	}
