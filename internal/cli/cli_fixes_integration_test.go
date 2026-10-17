@@ -140,3 +140,28 @@ func TestSetupRegistersUserAsMemberForMyTasks(t *testing.T) {
 		t.Errorf("my-tasks should default to the setup user:\n%s", out)
 	}
 }
+
+// A client that writes its calls and closes stdin still gets every answer,
+// and the server reports the build version.
+func TestMCPAnswersCallsSentBeforeEOFAndReportsVersion(t *testing.T) {
+	tmp, env := newProjectEnv(t, "MCP", "kanban")
+	stdin := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}` + "\n" +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}` + "\n" +
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"my_tasks","arguments":{}}}` + "\n"
+	out, errOut, err := runWithStdin(t, tmp, env, stdin, "mcp")
+	if err != nil {
+		t.Fatalf("mcp: %v\n%s", err, errOut)
+	}
+	if strings.Contains(out, "context canceled") {
+		t.Errorf("calls were cancelled at EOF:\n%s", out)
+	}
+	for _, id := range []string{`"id":2`, `"id":3`} {
+		if !strings.Contains(out, id) {
+			t.Errorf("no response with %s:\n%s", id, out)
+		}
+	}
+	if !strings.Contains(out, `"version":"dev"`) {
+		t.Errorf("server should report the build version (dev in tests):\n%s", out)
+	}
+}

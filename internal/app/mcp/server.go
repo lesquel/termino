@@ -4,11 +4,19 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"os/signal"
+	"reflect"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
 	agentapp "github.com/lesquel/termino/internal/features/agent/application"
@@ -43,14 +51,18 @@ type Deps struct {
 	// the task's source file. Its error is logged, never returned to the agent:
 	// the move itself already succeeded.
 	OnTaskDone func(ctx context.Context, taskID string) error
+	// Version is reported to clients as the server version (the CLI build
+	// version); empty means "dev".
+	Version string
 }
 
 // NewServer creates and configures the MCP server with all 13 tools registered.
 func NewServer(deps Deps) *server.MCPServer {
-	s := server.NewMCPServer(
-		"termino",
-		"1.0.0",
-	)
+	version := deps.Version
+	if version == "" {
+		version = "dev"
+	}
+	s := server.NewMCPServer("termino", version)
 
 	// Register the 5 read tools (always available).
 	s.AddTool(listProjectsTool(), makeListProjectsHandler(deps))
@@ -80,7 +92,130 @@ func Serve(s *server.MCPServer, logger *slog.Logger) error {
 	if logger != nil {
 		logger.Info("termino MCP server starting", "transport", "stdio")
 	}
-	return server.ServeStdio(s)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	return ServeIO(ctx, s, os.Stdin, os.Stdout, logger)
+}
+
+// drainTimeout bounds how long ServeIO waits, after stdin closes, for the
+// requests already received to be answered.
+const drainTimeout = 30 * time.Second
+
+// ServeIO serves s over in/out until in reaches EOF or ctx is cancelled.
+// When in reaches EOF, requests already received are allowed to finish and
+// answer (up to drainTimeout) before the server shuts down, so a client that
+// writes its calls and closes stdin still gets every response.
+func ServeIO(ctx context.Context, s *server.MCPServer, in io.Reader, out io.Writer, logger *slog.Logger) error {
+	tracker := newRequestTracker()
+	pr, pw := io.Pipe()
+	go func() {
+		err := tracker.pump(in, pw)
+		if !tracker.waitIdle(ctx, drainTimeout) && logger != nil {
+			logger.Warn("mcp: stopping with requests still in flight", "pending", tracker.pending())
+		}
+		_ = pw.CloseWithError(err)
+	}()
+	return server.NewStdioServer(s).Listen(ctx, pr, &responseWriter{out: out, tracker: tracker})
+}
+
+// requestTracker counts the JSON-RPC requests read from the client that have
+// not been answered yet.
+type requestTracker struct {
+	mu      sync.Mutex
+	open    map[string]struct{}
+	changed chan struct{} // closed and replaced on every change
+}
+
+func newRequestTracker() *requestTracker {
+	return &requestTracker{open: map[string]struct{}{}, changed: make(chan struct{})}
+}
+
+// rpcEnvelope holds the fields that classify a JSON-RPC message.
+type rpcEnvelope struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+}
+
+// pump copies in to w line by line, recording every request (a message with
+// both a method and an id). It returns nil at EOF.
+func (t *requestTracker) pump(in io.Reader, w io.Writer) error {
+	reader := bufio.NewReader(in)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			var env rpcEnvelope
+			if json.Unmarshal(line, &env) == nil && env.Method != "" && len(env.ID) > 0 && string(env.ID) != "null" {
+				t.update(string(env.ID), true)
+			}
+			if _, werr := w.Write(line); werr != nil {
+				return werr
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// update adds or removes a request id and wakes waiters.
+func (t *requestTracker) update(id string, add bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if add {
+		t.open[id] = struct{}{}
+	} else {
+		delete(t.open, id)
+	}
+	close(t.changed)
+	t.changed = make(chan struct{})
+}
+
+func (t *requestTracker) pending() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.open)
+}
+
+// waitIdle blocks until every recorded request is answered, ctx is done or
+// timeout passes. It reports whether the tracker became idle.
+func (t *requestTracker) waitIdle(ctx context.Context, timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		t.mu.Lock()
+		idle, changed := len(t.open) == 0, t.changed
+		t.mu.Unlock()
+		if idle {
+			return true
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		}
+	}
+}
+
+// responseWriter forwards server output and marks requests as answered when
+// their response (a message with an id and no method) is written. The stdio
+// server writes each message with a single Write call.
+type responseWriter struct {
+	out     io.Writer
+	tracker *requestTracker
+}
+
+func (w *responseWriter) Write(p []byte) (int, error) {
+	n, err := w.out.Write(p)
+	var env rpcEnvelope
+	if json.Unmarshal(p, &env) == nil && env.Method == "" && len(env.ID) > 0 {
+		w.tracker.update(string(env.ID), false)
+	}
+	return n, err
 }
 
 // --- Helper ---
@@ -117,6 +252,10 @@ func resolveActor(ctx context.Context, deps Deps) (sharedomain.Actor, error) {
 }
 
 func textResult(v any) (*mcplib.CallToolResult, error) {
+	// An empty list is [] for clients, never null.
+	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice && rv.IsNil() {
+		v = []any{}
+	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return nil, err
@@ -361,8 +500,17 @@ func makeGetTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(err)
 		}
+		if task.DeletedAt != nil {
+			return errResult(fmt.Errorf("task %s not found", taskID))
+		}
 		comments, _ := deps.TaskUC.ListCommentsByTask(ctx, taskID)
 		activity, _ := deps.TaskUC.ListActivityByTask(ctx, taskID)
+		if comments == nil {
+			comments = []taskdomain.Comment{}
+		}
+		if activity == nil {
+			activity = []taskdomain.Activity{}
+		}
 		result := map[string]any{
 			"task":     task,
 			"comments": comments,

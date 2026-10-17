@@ -106,7 +106,7 @@ func scanColumn(row *sql.Row) (boarddomain.Column, error) {
 	err := row.Scan(&col.ID, &col.ProjectID, &col.Name, &col.Position, &wipLimit)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return boarddomain.Column{}, fmt.Errorf("%w: column not found", boarddomain.ErrColumnNotFound)
+			return boarddomain.Column{}, boarddomain.ErrColumnNotFound
 		}
 		return boarddomain.Column{}, fmt.Errorf("column scan: %w", err)
 	}

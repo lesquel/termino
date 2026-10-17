@@ -59,6 +59,7 @@ func newMCPCmd() *cobra.Command {
 				Logger:        logging.Logger,
 				ActorOverride: strings.TrimSpace(actor),
 				ReadOnly:      readOnly,
+				Version:       Version,
 				OnTaskDone: func(ctx context.Context, taskID string) error {
 					return syncSvc.ExportTask(ctx, taskID, sources)
 				},
