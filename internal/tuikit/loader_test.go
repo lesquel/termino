@@ -10,6 +10,12 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// builtinThemes are the themes termino ships; each must stay embedded.
+var builtinThemes = []string{
+	"default", "spooky", "dracula", "nord", "gruvbox",
+	"catppuccin-mocha", "tokyo-night", "solarized-light", "high-contrast",
+}
+
 var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 // TestBuiltinThemesAreValid guards the embedded themes (the single source of
@@ -17,7 +23,7 @@ var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 // color as a #RRGGBB hex value, use a known border style, and load via Load.
 func TestBuiltinThemesAreValid(t *testing.T) {
 	names := Available("")
-	for _, want := range []string{"default", "spooky"} {
+	for _, want := range builtinThemes {
 		if !slices.Contains(names, want) {
 			t.Fatalf("built-in theme %q missing; got %v", want, names)
 		}

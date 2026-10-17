@@ -1,0 +1,23 @@
+# Termino dracula theme — Dracula palette (draculatheme.com)
+
+[colors]
+surface     = "#282A36"
+surface_alt = "#21222C"
+text        = "#F8F8F2"
+text_muted  = "#6272A4"
+accent      = "#BD93F9"
+success     = "#50FA7B"
+warning     = "#F1FA8C"
+danger      = "#FF5555"
+border      = "#44475A"
+done        = "#6272A4"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "rounded"

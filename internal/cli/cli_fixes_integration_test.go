@@ -53,8 +53,10 @@ func TestCommandsUseProjectAssociatedWithCwd(t *testing.T) {
 func TestThemeWithoutArgsListsThemes(t *testing.T) {
 	tmp, env := isolatedEnv(t)
 	out := mustRun(t, tmp, env, "theme")
-	if !strings.Contains(out, "default") || !strings.Contains(out, "spooky") {
-		t.Errorf("theme list = %q", out)
+	for _, name := range []string{"default", "spooky", "dracula", "nord", "gruvbox", "catppuccin-mocha", "tokyo-night", "solarized-light", "high-contrast"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("theme %q missing from list %q", name, out)
+		}
 	}
 	if l := lineWith(out, "default"); !strings.Contains(l, "*") {
 		t.Errorf("current theme not marked: %q", out)

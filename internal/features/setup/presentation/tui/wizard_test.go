@@ -337,3 +337,34 @@ func TestDoneHintWhenOpeningTheBoard(t *testing.T) {
 		t.Errorf("done screen still tells the user to run termino board:\n%s", v)
 	}
 }
+
+// Every built-in theme is offered and the theme step still fits 80x24.
+func TestThemeStepListsAllBuiltinThemes(t *testing.T) {
+	st := firstRunState()
+	st.Themes = tuikit.Available("")
+	m := newModel(t, st, &recorder{})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = press(next.(Model), "enter", "enter", "enter", "enter", "enter", "enter")
+	v := ansi.Strip(m.View())
+	for _, name := range []string{"dracula", "nord", "gruvbox", "catppuccin-mocha", "tokyo-night", "solarized-light", "high-contrast"} {
+		if !strings.Contains(v, name) {
+			t.Errorf("theme %q not offered:\n%s", name, v)
+		}
+	}
+	if h := strings.Count(v, "\n") + 1; h > 24 {
+		t.Fatalf("80x24 theme step with %d themes is %d lines tall", len(st.Themes), h)
+	}
+	// Narrow terminals stack the preview under a windowed list that keeps
+	// the highlighted theme visible.
+	for _, w := range []int{60, 40} {
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: 24})
+		nm := press(next.(Model), "down", "down", "down", "down")
+		v := ansi.Strip(nm.View())
+		if h := strings.Count(v, "\n") + 1; h > 24 {
+			t.Errorf("%dx24 theme step is %d lines tall:\n%s", w, h, v)
+		}
+		if cur := st.Themes[nm.themeCursor]; !strings.Contains(v, "› "+cur) {
+			t.Errorf("%d wide: highlighted theme %q not visible:\n%s", w, cur, v)
+		}
+	}
+}

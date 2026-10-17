@@ -1,0 +1,23 @@
+# Termino solarized-light theme — Solarized light palette (ethanschoonover.com/solarized); best on a light terminal
+
+[colors]
+surface     = "#FDF6E3"
+surface_alt = "#EEE8D5"
+text        = "#586E75"
+text_muted  = "#93A1A1"
+accent      = "#268BD2"
+success     = "#859900"
+warning     = "#B58900"
+danger      = "#DC322F"
+border      = "#93A1A1"
+done        = "#93A1A1"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "rounded"

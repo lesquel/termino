@@ -1,0 +1,23 @@
+# Termino tokyo-night theme — Tokyo Night palette, night variant (github.com/folke/tokyonight.nvim)
+
+[colors]
+surface     = "#1A1B26"
+surface_alt = "#16161E"
+text        = "#C0CAF5"
+text_muted  = "#565F89"
+accent      = "#7AA2F7"
+success     = "#9ECE6A"
+warning     = "#E0AF68"
+danger      = "#F7768E"
+border      = "#3B4261"
+done        = "#565F89"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "rounded"

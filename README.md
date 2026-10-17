@@ -186,7 +186,7 @@ Run `termino <command> --help` for full flags.
 | `termino widget install [--shell bash\|zsh]` / `uninstall` | Add/remove the widget block in `~/.bashrc` or `~/.zshrc` |
 | `termino connect <agent>` / `termino disconnect <agent>` | Connect/disconnect an agent integration (`kiro`) |
 | `termino mcp [--actor --read-only]` | Run the MCP server on stdio |
-| `termino theme [name]` | List themes (current marked `*`), or set one (`default`, `spooky`, or your own) |
+| `termino theme [name]` | List themes (current marked `*`), or set one: `default`, `spooky`, `dracula`, `nord`, `gruvbox`, `catppuccin-mocha`, `tokyo-night`, `solarized-light` (for light terminals), `high-contrast` (monochrome, ASCII priority symbols), or your own |
 | `termino doctor` | Diagnose the installation |
 | `termino uninstall [--purge]` | Remove integrations; `--purge` also deletes data and config |
 | `termino version` | Print the version |

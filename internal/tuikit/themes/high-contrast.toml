@@ -1,0 +1,23 @@
+# Termino high-contrast theme — monochrome black and white; priorities read from ASCII symbols
+
+[colors]
+surface     = "#000000"
+surface_alt = "#303030"
+text        = "#FFFFFF"
+text_muted  = "#B2B2B2"
+accent      = "#FFFFFF"
+success     = "#FFFFFF"
+warning     = "#FFFFFF"
+danger      = "#FFFFFF"
+border      = "#FFFFFF"
+done        = "#8A8A8A"
+
+[symbols]
+done     = "x"
+high     = "^"
+critical = "!!!"
+medium   = "-"
+low      = "v"
+
+[options]
+border_style = "thick"

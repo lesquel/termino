@@ -1,0 +1,23 @@
+# Termino gruvbox theme — Gruvbox dark palette (github.com/morhetz/gruvbox)
+
+[colors]
+surface     = "#282828"
+surface_alt = "#1D2021"
+text        = "#EBDBB2"
+text_muted  = "#928374"
+accent      = "#FE8019"
+success     = "#B8BB26"
+warning     = "#FABD2F"
+danger      = "#FB4934"
+border      = "#504945"
+done        = "#665C54"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "normal"

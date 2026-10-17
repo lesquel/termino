@@ -1,0 +1,23 @@
+# Termino nord theme — Nord palette (nordtheme.com): Polar Night, Snow Storm, Frost, Aurora
+
+[colors]
+surface     = "#2E3440"
+surface_alt = "#3B4252"
+text        = "#ECEFF4"
+text_muted  = "#616E88"
+accent      = "#88C0D0"
+success     = "#A3BE8C"
+warning     = "#EBCB8B"
+danger      = "#BF616A"
+border      = "#434C5E"
+done        = "#4C566A"
+
+[symbols]
+done     = "✓"
+high     = "▲"
+critical = "!!!"
+medium   = "–"
+low      = "▼"
+
+[options]
+border_style = "rounded"

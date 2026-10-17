@@ -599,17 +599,40 @@ func (m Model) themeBody(cw int) string {
 	if err != nil {
 		preview = "preview unavailable: " + err.Error()
 	} else {
-		pw := cw
-		side := cw >= 60+listW+3
-		if side {
-			pw = cw - listW - 3
-		}
-		preview = RenderPreview(th, strings.TrimSpace(m.project.Value()), m.key.Value(), pw)
-		if side {
+		// The preview sits beside the list when it keeps a readable width.
+		pw := cw - listW - 3
+		if pw >= minSidePreview {
+			preview = RenderPreview(th, strings.TrimSpace(m.project.Value()), m.key.Value(), pw)
 			return lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(listW+3).Render(list), preview)
 		}
+		preview = RenderPreview(th, strings.TrimSpace(m.project.Value()), m.key.Value(), cw)
 	}
-	return list + "\n\n" + preview
+	// Stacked under the preview, a long list shows a window around the cursor.
+	return m.list(window(names, m.themeCursor, stackedThemeRows)) + "\n\n" + preview
+}
+
+const (
+	// minSidePreview is the narrowest preview drawn beside the theme list.
+	minSidePreview = 44
+	// stackedThemeRows caps the theme list when it sits above the preview.
+	stackedThemeRows = 5
+)
+
+// window returns at most n of opts around cursor and the cursor's index in
+// that slice; elided ends are marked with "…".
+func window(opts []string, cursor, n int) ([]string, int) {
+	if len(opts) <= n {
+		return opts, cursor
+	}
+	start := min(max(cursor-n/2, 0), len(opts)-n)
+	out := append([]string(nil), opts[start:start+n]...)
+	if start > 0 {
+		out[0] = "…"
+	}
+	if start+n < len(opts) {
+		out[n-1] = "…"
+	}
+	return out, cursor - start
 }
 
 func (m Model) summary(cw int) string {
