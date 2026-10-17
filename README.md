@@ -44,6 +44,7 @@ Windows) for linux, darwin and windows on amd64 and arm64, and a
 ## Quick start
 
 ```sh
+termino                                     # first run: setup wizard, then the board
 termino setup                               # wizard: name, project, theme, widget
 termino project new --name "Web app" --key WEB --associate-pwd
 termino add Fix login redirect --priority high   # quotes are optional
@@ -55,7 +56,9 @@ termino connect kiro                        # register the MCP server in Kiro
 
 ### Setup
 
-`termino setup` opens a full-screen wizard (8 steps, `esc`/`shift+tab` goes
+Running `termino` before any project exists starts the same wizard and opens
+the board when it is done (without a terminal it prints a pointer to
+`termino setup` instead). `termino setup` opens a full-screen wizard (8 steps, `esc`/`shift+tab` goes
 back, `ctrl+c` quits without changing anything): your name (default `$USER`),
 project name (default: the current directory's name), project key (suggested
 from the name, e.g. "Web App" → `WA`, validated as you type), methodology
@@ -64,7 +67,8 @@ live board preview, and the bash/zsh shell widget (fish is not supported yet
 and is skipped). A summary shows every choice before anything is written.
 
 Re-running it offers **Edit current setup**, **Add another project** or
-**Cancel**. Editing updates the current project in place (name, methodology,
+**Cancel**. The current project is the one associated with the working
+directory, as everywhere else. Editing updates it in place (name, methodology,
 directory association) and never creates a duplicate; the key stays
 read-only because existing task IDs (`KEY-N`) use it — add another project
 for a new key.
@@ -106,7 +110,9 @@ under the header and clear after about 3 seconds. An empty board says
 Moving a card into the last column (Done) plays a short celebration, unless
 motion is off or `NO_COLOR` is set. Columns over their WIP limit are flagged.
 The selected card is marked with `>`, so the selection stays visible without
-color. The new-task form (`n`) has a title, a priority (`←`/`→`) and
+color. Cards start with the theme's priority symbol (`▲` high, `!!!`
+critical, `▼` low in the default theme; medium has none). Applying a filter
+selects the first matching card. The new-task form (`n`) has a title, a priority (`←`/`→`) and
 comma-separated labels; `tab` moves between fields and `enter` creates. The
 task detail shows the assignee, labels and `KEY-N`; `e` edits and `ctrl+s`
 saves (`enter` also saves from the title field, and inserts a newline in the
