@@ -164,7 +164,7 @@ func (m SelectorModel) View() string {
 	if len(m.list.Items()) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(m.theme.TextMuted).
-			Render("No projects yet.\n\nRun `termino setup` to create your first project,\nthen open the board again with `termino`.")
+			Render("No projects yet.\n\nRun `termino setup` to create your first project,\nthen open the board again with `termino`.\n\nPress q to quit.")
 	}
 	return m.list.View()
 }

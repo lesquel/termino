@@ -21,7 +21,7 @@ It stores data in SQLite and exposes a TUI, MCP server, and CLI.`,
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Running `termino` with no subcommand opens the TUI.
-		return startTUI()
+		return startTUI(cmd)
 	},
 }
 

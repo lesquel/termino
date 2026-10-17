@@ -2,7 +2,10 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"os"
 
+	"github.com/charmbracelet/x/term"
 	apptui "github.com/lesquel/termino/internal/app/tui"
 	"github.com/spf13/cobra"
 )
@@ -13,13 +16,18 @@ func newBoardCmd() *cobra.Command {
 		Use:   "board",
 		Short: "Open the interactive Kanban board (TUI)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return startTUI()
+			return startTUI(cmd)
 		},
 	}
 }
 
-// startTUI builds TUI dependencies and launches the program.
-func startTUI() error {
+// startTUI builds TUI dependencies and launches the program. Before any
+// project exists it runs the setup wizard first (or, without a terminal,
+// says how to set up) instead of opening an empty board.
+func startTUI(cmd *cobra.Command) error {
+	if ready, err := ensureProject(cmd); err != nil || !ready {
+		return err
+	}
 	cfg, err := globalContainer.Config()
 	if err != nil {
 		return err
@@ -99,6 +107,35 @@ func startTUI() error {
 	cancel()
 	<-watchDone
 	return runErr
+}
+
+// ensureProject reports whether a project exists, running the setup wizard
+// when none does and a terminal is attached. Cancelling setup returns false.
+func ensureProject(cmd *cobra.Command) (bool, error) {
+	projectUC, err := globalContainer.ProjectUseCases()
+	if err != nil {
+		return false, err
+	}
+	projects, err := projectUC.ListProjects(context.Background())
+	if err != nil {
+		return false, err
+	}
+	if len(projects) > 0 {
+		return true, nil
+	}
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
+		fmt.Fprintln(cmd.OutOrStdout(), "No projects yet. Run `termino setup` to create your first project.")
+		return false, nil
+	}
+	if err := runSetup(cmd, &setupFlags{}); err != nil {
+		return false, err
+	}
+	projects, err = projectUC.ListProjects(context.Background())
+	if err != nil || len(projects) == 0 {
+		return false, err
+	}
+	globalContainer.ReloadConfig() // setup wrote the user and current project
+	return true, nil
 }
 
 // closedChan returns an already-closed channel.

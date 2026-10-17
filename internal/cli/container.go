@@ -57,6 +57,14 @@ func (c *Container) Config() (*config.Config, error) {
 	return c.cfg, nil
 }
 
+// ReloadConfig drops the cached config so the next Config call reads the
+// file again (after setup wrote it).
+func (c *Container) ReloadConfig() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg = nil
+}
+
 // DB returns the open database, opening it lazily on first call.
 func (c *Container) DB() (*sql.DB, error) {
 	c.mu.Lock()
