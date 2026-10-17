@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
+	widgetapp "github.com/lesquel/termino/internal/features/widget/application"
 	widgetdomain "github.com/lesquel/termino/internal/features/widget/domain"
 	widgetinfra "github.com/lesquel/termino/internal/features/widget/infrastructure"
 	"github.com/lesquel/termino/internal/platform/config"
@@ -66,10 +68,6 @@ func renderWidget() error {
 	if err != nil {
 		return err
 	}
-	if cfg.CurrentProjectID == "" {
-		return fmt.Errorf("no current project set — run `termino project new` first")
-	}
-
 	uc, err := globalContainer.WidgetUseCases()
 	if err != nil {
 		return err
@@ -78,7 +76,13 @@ func renderWidget() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Millisecond)
 	defer cancel()
 
-	summary, err := uc.GetSummary(ctx, cfg.CurrentProjectID, "cli", "")
+	// The project associated with the working directory wins; the configured
+	// current project is the fallback.
+	cwd, _ := os.Getwd()
+	summary, err := uc.GetSummary(ctx, cfg.CurrentProjectID, "cli", cwd)
+	if errors.Is(err, widgetapp.ErrNoProject) {
+		return fmt.Errorf("%w — run `termino project new --associate-pwd` first", err)
+	}
 	if err != nil {
 		return fmt.Errorf("get summary: %w", err)
 	}

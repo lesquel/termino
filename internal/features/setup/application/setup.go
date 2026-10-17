@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
@@ -33,6 +34,7 @@ type SetupWizard struct {
 	registry   *setupdomain.InstallationRegistry
 	in         io.Reader
 	out        io.Writer
+	getwd      func() (string, error) // working directory offered for association
 }
 
 // NewSetupWizard constructs a SetupWizard with no connectors.
@@ -45,6 +47,7 @@ func NewSetupWizard(
 		registry:  registry,
 		in:        os.Stdin,
 		out:       os.Stdout,
+		getwd:     os.Getwd,
 	}
 }
 
@@ -60,6 +63,7 @@ func NewSetupWizardWithConnectors(
 		registry:   registry,
 		in:         os.Stdin,
 		out:        os.Stdout,
+		getwd:      os.Getwd,
 	}
 }
 
@@ -98,11 +102,22 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 		projectKey = "PROJ"
 	}
 
+	// Offer to associate the working directory so the widget picks this
+	// project automatically when the shell is inside it.
+	var associatedPath string
+	if pwd, err := w.getwd(); err == nil && pwd != "" {
+		fmt.Fprintf(w.out, "Associate this project with %s? [Y/n]: ", pwd)
+		if answer := strings.ToLower(readLine(scanner)); answer == "" || answer == "y" || answer == "yes" {
+			associatedPath = filepath.Clean(pwd)
+		}
+	}
+
 	actor := sharedomain.Actor{ID: "setup", Name: name, Kind: "human"}
 	project, err := w.projectUC.CreateProject(ctx, actor, projectapp.CreateProjectInput{
-		Name:        projectName,
-		Key:         projectKey,
-		Methodology: projectdomain.MethodologyKanban,
+		Name:           projectName,
+		Key:            projectKey,
+		Methodology:    projectdomain.MethodologyKanban,
+		AssociatedPath: associatedPath,
 	})
 	if err != nil {
 		return fmt.Errorf("create project: %w", err)
