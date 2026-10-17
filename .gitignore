@@ -3,3 +3,8 @@ bin/
 /termino
 *.test
 *.out
+.agents/
+odd/
+.atl/
+.claude/
+CLAUDE.md

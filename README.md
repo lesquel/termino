@@ -209,4 +209,4 @@ and `checksums.txt`; publish the draft to make it visible to `install.sh`.
 
 ## License
 
-License: TBD.
+MIT. See [LICENSE](LICENSE).

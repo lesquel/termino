@@ -124,7 +124,7 @@ func TestKiroConnector_OwnsOnlyItsItems(t *testing.T) {
 		{connectordomain.InstalledItem{Kind: "file", Path: "/h/.kiro/settings/mcp.json", Marker: "termino"}, true},
 		{connectordomain.InstalledItem{Kind: "file", Path: "/p/.kiro/steering/termino.md", Marker: "termino-steering"}, true},
 		{connectordomain.InstalledItem{Kind: "block", Path: "/h/.bashrc", Marker: "termino-widget-start"}, false},
-		{connectordomain.InstalledItem{Kind: "file", Path: "/h/.claude.json", Marker: "termino"}, false},
+		{connectordomain.InstalledItem{Kind: "file", Path: "/h/.other-agent.json", Marker: "termino"}, false},
 	}
 	for _, tc := range cases {
 		if got := c.Owns(tc.item); got != tc.want {
