@@ -1,0 +1,20 @@
+version = 1
+id = "3f6c2a9e-8d1b-4c57-9a0e-2b7d4e1f6a33"
+number = 3
+title = "Probar los \"dialogos\" nuevos"
+column = "Backlog"
+position = 2.5
+priority = "medium"
+points = 3
+assignee = "Ana"
+labels = ["bug", "ui"]
+sprint = "Sprint 1"
+due = 2026-10-30
+created_at = 2026-10-17T18:00:00Z
+updated_at = 2026-10-17T18:10:00Z
+updated_by = "Ana"
+description = """
+Multi-line text
+kept as written.
+Quotes \"\"" and a backslash \\ stay.
+"""

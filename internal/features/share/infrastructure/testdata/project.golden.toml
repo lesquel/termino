@@ -1,0 +1,39 @@
+version = 1
+key = "PROJ"
+name = "termino"
+methodology = "scrum"
+
+[[columns]]
+name = "Backlog"
+position = 0
+wip_limit = 0
+
+[[columns]]
+name = "In Progress"
+position = 1
+wip_limit = 3
+
+[[members]]
+name = "Ana"
+kind = "human"
+
+[[members]]
+name = "claude"
+kind = "agent"
+
+[[labels]]
+name = "bug"
+
+[[labels]]
+name = "ui"
+color = "#7aa2f7"
+
+[[sprints]]
+name = "Sprint 1"
+start = 2026-10-20
+end = 2026-11-03
+state = "active"
+
+[[sprints]]
+name = "Sprint 2"
+state = "draft"
