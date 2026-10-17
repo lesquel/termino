@@ -26,6 +26,10 @@ func startTUI() error {
 	if err != nil {
 		return err
 	}
+	// Open the project associated with the working directory, if any.
+	if projectID, err := currentProjectID(); err == nil {
+		cfg.CurrentProjectID = projectID
+	}
 	db, err := globalContainer.DB()
 	if err != nil {
 		return err

@@ -19,6 +19,7 @@ func newTaskCmd() *cobra.Command {
 		description string
 		priority    string
 		columnFlag  string
+		labels      []string
 	)
 
 	cmd := &cobra.Command{
@@ -31,16 +32,23 @@ func newTaskCmd() *cobra.Command {
 				return err
 			}
 
-			cfg, err := globalContainer.Config()
+			labelNames, err := cleanLabels(labels)
 			if err != nil {
 				return err
 			}
-			if cfg.CurrentProjectID == "" {
-				return fmt.Errorf("no current project set — run `termino project new` first")
+
+			ctx := context.Background()
+			projectID, err := currentProjectID()
+			if err != nil {
+				return err
+			}
+			key, err := projectKey(ctx, projectID)
+			if err != nil {
+				return err
 			}
 
 			// Resolve column: use the flag or fall back to the first column.
-			colID, err := resolveColumn(cfg.CurrentProjectID, columnFlag)
+			colID, err := resolveColumn(projectID, columnFlag)
 			if err != nil {
 				return err
 			}
@@ -51,8 +59,8 @@ func newTaskCmd() *cobra.Command {
 			}
 
 			actor := sharedomain.Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
-			t, err := uc.CreateTask(context.Background(), actor, taskapp.CreateTaskInput{
-				ProjectID:   cfg.CurrentProjectID,
+			t, err := uc.CreateTask(ctx, actor, taskapp.CreateTaskInput{
+				ProjectID:   projectID,
 				Title:       title,
 				Description: desc,
 				ColumnID:    colID,
@@ -62,24 +70,17 @@ func newTaskCmd() *cobra.Command {
 				return fmt.Errorf("create task: %w", err)
 			}
 
-			// Fetch project key to build the task ref.
-			projRepo, err := globalContainer.ProjectUseCases()
-			if err != nil {
-				return err
-			}
-			p, err := projRepo.ListProjects(context.Background())
-			if err != nil {
-				return err
-			}
-			key := "TER"
-			for _, proj := range p {
-				if proj.ID == cfg.CurrentProjectID {
-					key = proj.Key
-					break
+			suffix := ""
+			if len(labelNames) > 0 {
+				if err := uc.AddLabels(ctx, actor, t.ID, labelNames); err != nil {
+					return fmt.Errorf("task %s-%d created, but labelling failed: %w", key, t.Number, err)
+				}
+				if labelled, err := uc.FindTaskByID(ctx, t.ID); err == nil && len(labelled.Labels) > 0 {
+					suffix = " [" + strings.Join(sanitizeAll(labelled.Labels), ", ") + "]"
 				}
 			}
 
-			fmt.Printf("Created task %s-%d: %s\n", key, t.Number, sanitize.Line(t.Title))
+			fmt.Printf("Created task %s-%d: %s%s\n", key, t.Number, sanitize.Line(t.Title), suffix)
 			return nil
 		},
 	}
@@ -87,7 +88,33 @@ func newTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Task description")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "Priority: low, medium, high, critical")
 	cmd.Flags().StringVar(&columnFlag, "column", "", "Column ID or name (defaults to first column)")
+	cmd.Flags().StringSliceVar(&labels, "label", nil, "Label to attach (repeatable or comma-separated; created when missing)")
 	return cmd
+}
+
+// cleanLabels sanitizes label names typed by the user, dropping empty ones.
+func cleanLabels(raw []string) ([]string, error) {
+	var out []string
+	for _, r := range raw {
+		name := sanitize.Line(r)
+		if name == "" {
+			if strings.TrimSpace(r) != "" {
+				return nil, fmt.Errorf("label %q is empty after removing control characters", r)
+			}
+			continue
+		}
+		out = append(out, name)
+	}
+	return out, nil
+}
+
+// sanitizeAll returns names made safe for terminal output.
+func sanitizeAll(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = sanitize.Line(n)
+	}
+	return out
 }
 
 // normalizeTaskInput sanitizes user-supplied task text at the CLI edge and
@@ -107,12 +134,15 @@ func normalizeTaskInput(rawTitle, rawDesc, rawPriority string) (string, string, 
 	return title, sanitize.Clean(rawDesc), prio, nil
 }
 
-// resolveColumn returns the column ID to use for a new task.
-// If colFlag is provided it is treated as the column ID directly.
-// Otherwise, the first column of the project is used.
+// resolveColumn returns the column ID to use for a new task: the column
+// named or identified by colFlag, otherwise the project's first column.
 func resolveColumn(projectID, colFlag string) (string, error) {
-	if colFlag != "" {
-		return colFlag, nil
+	if strings.TrimSpace(colFlag) != "" {
+		col, _, err := resolveBoardColumn(context.Background(), projectID, colFlag)
+		if err != nil {
+			return "", err
+		}
+		return col.ID, nil
 	}
 	boardUC, err := globalContainer.BoardUseCases()
 	if err != nil {

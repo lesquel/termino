@@ -4,6 +4,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -113,6 +114,20 @@ type CommentRepository interface {
 	Save(ctx context.Context, c Comment) error
 	// ListByTask returns all comments for the given task ID.
 	ListByTask(ctx context.Context, taskID string) ([]Comment, error)
+}
+
+// ErrLabelNotFound is returned when a project has no label with a given name.
+var ErrLabelNotFound = errors.New("label not found")
+
+// LabelRepository persists project labels and their attachment to tasks.
+type LabelRepository interface {
+	// FindByName returns the project's label whose name equals name ignoring
+	// case, or ErrLabelNotFound.
+	FindByName(ctx context.Context, projectID, name string) (Label, error)
+	// Save inserts a new Label.
+	Save(ctx context.Context, l Label) error
+	// Attach links a label to a task; attaching twice is a no-op.
+	Attach(ctx context.Context, taskID, labelID string) error
 }
 
 // ActivityRepository is an append-only store for activity log entries.

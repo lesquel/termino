@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
@@ -573,7 +572,7 @@ func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(err)
 		}
-		// Done column = last column by position.
+		// Done column: the one named Done, else the last by position.
 		doneCol := findDoneColumn(board.Columns)
 		if doneCol == "" {
 			return errResult(fmt.Errorf("could not find done column for project %s", projectID))
@@ -626,7 +625,7 @@ func makeDeleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 			t, findErr := deps.TaskUC.FindTaskByID(ctx, taskID)
 			ref := taskID
 			if findErr == nil {
-				ref = fmt.Sprintf("TER-%s", strconv.Itoa(t.Number))
+				ref = taskRef(ctx, deps, t)
 			}
 			return errResult(fmt.Errorf("Pass confirm: true to delete task %s", ref))
 		}
@@ -663,16 +662,27 @@ func findInProgressColumn(cols []boarddomain.Column) string {
 	return ""
 }
 
-// findDoneColumn returns the ID of the last column by position.
-func findDoneColumn(cols []boarddomain.Column) string {
-	if len(cols) == 0 {
-		return ""
-	}
-	last := cols[0]
-	for _, c := range cols {
-		if c.Position > last.Position {
-			last = c
+// taskRef formats t as KEY-N using its project's real key, falling back to
+// #N when the project cannot be resolved.
+func taskRef(ctx context.Context, deps Deps, t taskdomain.Task) string {
+	if deps.ProjectUC != nil {
+		if projects, err := deps.ProjectUC.ListProjects(ctx); err == nil {
+			for _, p := range projects {
+				if p.ID == t.ProjectID {
+					return fmt.Sprintf("%s-%d", p.Key, t.Number)
+				}
+			}
 		}
 	}
-	return last.ID
+	return fmt.Sprintf("#%d", t.Number)
+}
+
+// findDoneColumn returns the ID of the project's Done column, using the same
+// rule as the board and CLI (boarddomain.DoneColumn).
+func findDoneColumn(cols []boarddomain.Column) string {
+	done, ok := boarddomain.DoneColumn(cols)
+	if !ok {
+		return ""
+	}
+	return done.ID
 }

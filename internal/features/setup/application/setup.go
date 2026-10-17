@@ -13,6 +13,7 @@ import (
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
 	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
+	memberdomain "github.com/lesquel/termino/internal/features/member/domain"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
@@ -27,9 +28,19 @@ type ConnectorLike interface {
 	Connect(scope connectordomain.Scope) ([]connectordomain.InstalledItem, error)
 }
 
+// MemberRegistrar registers the configured user as a workspace member.
+type MemberRegistrar interface {
+	EnsureMember(ctx context.Context, name string, kind memberdomain.Kind) (memberdomain.Member, error)
+}
+
+// defaultThemes is offered when no theme list is configured.
+var defaultThemes = []string{"default", "spooky"}
+
 // SetupWizard orchestrates the first-run setup experience.
 type SetupWizard struct {
 	projectUC  *projectapp.ProjectUseCases
+	members    MemberRegistrar
+	themes     []string
 	connectors []ConnectorLike
 	registry   *setupdomain.InstallationRegistry
 	in         io.Reader
@@ -67,6 +78,19 @@ func NewSetupWizardWithConnectors(
 	}
 }
 
+// WithMembers makes the wizard register the user as a human member, so
+// assignments and my-tasks work for them right away.
+func (w *SetupWizard) WithMembers(m MemberRegistrar) *SetupWizard {
+	w.members = m
+	return w
+}
+
+// WithThemes sets the theme names offered in the theme step.
+func (w *SetupWizard) WithThemes(names []string) *SetupWizard {
+	w.themes = names
+	return w
+}
+
 // Run executes the setup wizard interactively.
 func (w *SetupWizard) Run(ctx context.Context) error {
 	scanner := bufio.NewScanner(w.in)
@@ -87,6 +111,11 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 	cfg.UserName = name
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
+	}
+	if w.members != nil {
+		if _, err := w.members.EnsureMember(ctx, name, memberdomain.KindHuman); err != nil {
+			return fmt.Errorf("register member %q: %w", name, err)
+		}
 	}
 	fmt.Fprintf(w.out, "✓ Name saved: %s\n\n", name)
 
@@ -171,9 +200,17 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 	}
 
 	// Step 5: offer theme selection.
-	fmt.Fprint(w.out, "Choose theme [default/spooky] (default): ")
+	themes := w.themes
+	if len(themes) == 0 {
+		themes = defaultThemes
+	}
+	fmt.Fprintf(w.out, "Choose theme [%s] (default): ", strings.Join(themes, "/"))
 	theme := strings.TrimSpace(readLine(scanner))
 	if theme == "" {
+		theme = "default"
+	}
+	if !contains(themes, theme) {
+		fmt.Fprintf(w.out, "  Unknown theme %q — using default.\n", theme)
 		theme = "default"
 	}
 	cfg.Theme = theme
@@ -184,6 +221,16 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 
 	fmt.Fprintln(w.out, "Setup complete! Run `termino` to open the board.")
 	return nil
+}
+
+// contains reports whether names holds name.
+func contains(names []string, name string) bool {
+	for _, n := range names {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // readLine reads a trimmed line from the scanner.

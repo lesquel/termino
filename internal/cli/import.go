@@ -72,8 +72,9 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if cfg.CurrentProjectID == "" {
-		return fmt.Errorf("no current project set — run `termino project new` first")
+	projectID, err := currentProjectID()
+	if err != nil {
+		return err
 	}
 	watch, _ := cmd.Flags().GetBool("watch")
 
@@ -105,7 +106,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 
 	var totalImported, totalUpdated int
 	for _, f := range files {
-		imported, updated, err := svc.ImportFromSource(ctx, actor, cfg.CurrentProjectID, f, sourceByName(sources, f.AdapterName))
+		imported, updated, err := svc.ImportFromSource(ctx, actor, projectID, f, sourceByName(sources, f.AdapterName))
 		if err != nil {
 			if len(args) == 1 {
 				return fmt.Errorf("import from %s: %w", f.Path, err)
@@ -126,7 +127,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	}
 	watchCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	done, err := svc.WatchFiles(watchCtx, actor, cfg.CurrentProjectID, files, sources)
+	done, err := svc.WatchFiles(watchCtx, actor, projectID, files, sources)
 	if err != nil {
 		return fmt.Errorf("start watcher: %w", err)
 	}

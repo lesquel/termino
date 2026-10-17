@@ -462,3 +462,52 @@ func collectActivities(rows *sql.Rows) ([]taskdomain.Activity, error) {
 	}
 	return activities, rows.Err()
 }
+
+// LabelRepository is the SQLite-backed implementation of taskdomain.LabelRepository.
+type LabelRepository struct {
+	db *sql.DB
+}
+
+// NewLabelRepository constructs a LabelRepository backed by db.
+func NewLabelRepository(db *sql.DB) *LabelRepository {
+	return &LabelRepository{db: db}
+}
+
+// FindByName returns the project's label named name, ignoring case.
+func (r *LabelRepository) FindByName(ctx context.Context, projectID, name string) (taskdomain.Label, error) {
+	var l taskdomain.Label
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, project_id, name, color
+		FROM   labels
+		WHERE  project_id = ? AND lower(name) = lower(?)
+		ORDER  BY rowid
+		LIMIT  1`, projectID, name).Scan(&l.ID, &l.ProjectID, &l.Name, &l.Color)
+	if errors.Is(err, sql.ErrNoRows) {
+		return taskdomain.Label{}, taskdomain.ErrLabelNotFound
+	}
+	if err != nil {
+		return taskdomain.Label{}, fmt.Errorf("label.FindByName: %w", err)
+	}
+	return l, nil
+}
+
+// Save inserts a new label.
+func (r *LabelRepository) Save(ctx context.Context, l taskdomain.Label) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO labels (id, project_id, name, color) VALUES (?, ?, ?, ?)`,
+		l.ID, l.ProjectID, l.Name, l.Color)
+	if err != nil {
+		return fmt.Errorf("label.Save: %w", err)
+	}
+	return nil
+}
+
+// Attach links a label to a task, ignoring a link that already exists.
+func (r *LabelRepository) Attach(ctx context.Context, taskID, labelID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`, taskID, labelID)
+	if err != nil {
+		return fmt.Errorf("label.Attach: %w", err)
+	}
+	return nil
+}

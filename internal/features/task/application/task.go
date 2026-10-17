@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,6 +83,7 @@ type TaskUseCases struct {
 	board         boarddomain.BoardRepository
 	bus           *events.Bus
 	methodologies MethodologyResolver
+	labels        taskdomain.LabelRepository
 }
 
 // NewTaskUseCases constructs a TaskUseCases instance.
@@ -106,6 +108,54 @@ func NewTaskUseCases(
 func (uc *TaskUseCases) WithMethodologies(r MethodologyResolver) *TaskUseCases {
 	uc.methodologies = r
 	return uc
+}
+
+// WithLabels enables AddLabels, backed by the given label repository.
+func (uc *TaskUseCases) WithLabels(r taskdomain.LabelRepository) *TaskUseCases {
+	uc.labels = r
+	return uc
+}
+
+// ErrLabelsUnavailable is returned by AddLabels when no label repository is
+// configured.
+var ErrLabelsUnavailable = errors.New("labels are not available")
+
+// AddLabels attaches the named labels to a task, creating the ones the
+// project does not have yet. Names are matched ignoring case, so an existing
+// label keeps its original spelling. Empty names are skipped.
+func (uc *TaskUseCases) AddLabels(ctx context.Context, actor Actor, taskID string, names []string) error {
+	if uc.labels == nil {
+		return ErrLabelsUnavailable
+	}
+	t, err := uc.tasks.FindByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("find task: %w", err)
+	}
+	var attached []string
+	seen := map[string]bool{}
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" || seen[strings.ToLower(name)] {
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		label, err := uc.labels.FindByName(ctx, t.ProjectID, name)
+		if errors.Is(err, taskdomain.ErrLabelNotFound) {
+			label = taskdomain.Label{ID: uuid.NewString(), ProjectID: t.ProjectID, Name: name}
+			err = uc.labels.Save(ctx, label)
+		}
+		if err != nil {
+			return fmt.Errorf("label %q: %w", name, err)
+		}
+		if err := uc.labels.Attach(ctx, t.ID, label.ID); err != nil {
+			return fmt.Errorf("attach label %q: %w", label.Name, err)
+		}
+		attached = append(attached, label.Name)
+	}
+	if len(attached) == 0 {
+		return nil
+	}
+	return uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "labeled", map[string]any{"labels": attached})
 }
 
 // CreateTask assigns the next number, sets the fractional position at the end

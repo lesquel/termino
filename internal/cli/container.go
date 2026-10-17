@@ -122,7 +122,7 @@ func (c *Container) TaskUseCases() (*taskapp.TaskUseCases, error) {
 			taskinfra.NewActivityRepository(db),
 			boardinfra.NewBoardRepository(db),
 			bus,
-		).WithMethodologies(projectUC)
+		).WithMethodologies(projectUC).WithLabels(taskinfra.NewLabelRepository(db))
 	}
 	return c.taskUC, nil
 }

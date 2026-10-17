@@ -53,6 +53,12 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	connectors := []setupapp.ConnectorLike{
 		kiroconnector.New(),
 	}
-	w := setupapp.NewSetupWizardWithConnectors(projectUC, connectors, reg)
+	memberUC, err := globalContainer.MemberUseCases()
+	if err != nil {
+		return err
+	}
+	w := setupapp.NewSetupWizardWithConnectors(projectUC, connectors, reg).
+		WithMembers(memberUC).
+		WithThemes(availableThemes())
 	return w.Run(context.Background())
 }

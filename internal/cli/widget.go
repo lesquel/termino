@@ -112,15 +112,18 @@ func renderWidget() error {
 }
 
 func newWidgetInstallCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install the widget block into ~/.bashrc or ~/.zshrc",
 		RunE:  runWidgetInstall,
 	}
+	cmd.Flags().String("shell", "", "Shell whose rc file receives the widget: bash or zsh (default: from $SHELL)")
+	return cmd
 }
 
 func runWidgetInstall(cmd *cobra.Command, args []string) error {
-	rcPath, err := detectShellRC()
+	shell, _ := cmd.Flags().GetString("shell")
+	rcPath, err := shellRC(shell)
 	if err != nil {
 		return err
 	}
@@ -211,6 +214,29 @@ func runWidgetUninstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✓ Widget block removed from %s\n", found.Path)
 	return nil
+}
+
+// shellRC returns the rc file for an explicitly named shell, or the one
+// detected from $SHELL when shell is empty. Only bash and zsh are supported.
+func shellRC(shell string) (string, error) {
+	shell = strings.ToLower(strings.TrimSpace(shell))
+	if shell == "" {
+		return detectShellRC()
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get home dir: %w", err)
+	}
+	switch shell {
+	case "bash":
+		return filepath.Join(home, ".bashrc"), nil
+	case "zsh":
+		return filepath.Join(home, ".zshrc"), nil
+	case "fish":
+		return "", fmt.Errorf("fish is not supported yet — the widget supports bash and zsh")
+	default:
+		return "", fmt.Errorf("unsupported shell %q — use bash or zsh", shell)
+	}
 }
 
 // detectShellRC returns the path to the shell rc file based on $SHELL.

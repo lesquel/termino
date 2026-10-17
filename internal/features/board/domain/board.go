@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Column is a vertical lane on the board into which tasks are placed.
@@ -48,9 +49,19 @@ func WIPExceeded(board Board, col Column) bool {
 	return col.WIPLimit != nil && len(board.Tasks[col.ID]) > *col.WIPLimit
 }
 
-// DoneColumn returns the column that represents completed work: by convention
-// the column with the highest position. ok is false when cols is empty.
+// DoneColumnName is the conventional name of the column holding finished work.
+const DoneColumnName = "Done"
+
+// DoneColumn returns the column that represents completed work: the column
+// named "Done" (ignoring case and surrounding spaces) when there is one,
+// otherwise the column with the highest position. ok is false when cols is
+// empty.
 func DoneColumn(cols []Column) (done Column, ok bool) {
+	for _, c := range cols {
+		if strings.EqualFold(strings.TrimSpace(c.Name), DoneColumnName) {
+			return c, true
+		}
+	}
 	for i, c := range cols {
 		if i == 0 || c.Position > done.Position {
 			done = c

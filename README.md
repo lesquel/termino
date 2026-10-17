@@ -97,27 +97,33 @@ Run `termino <command> --help` for full flags.
 | `termino setup` | Interactive setup: user name, first project, integrations |
 | `termino project new [--name --key --methodology kanban\|scrum --path --associate-pwd]` | Create a project |
 | `termino project list` | List projects |
-| `termino add <title> [--column --description --priority]` | Add a task to the current project |
+| `termino add <title> [--column --description --priority --label]` | Add a task to the current project; `--label` (repeatable) creates missing labels |
 | `termino task move <task> <column>` | Move a task |
 | `termino task assign <task> <member\|none>` | Assign or unassign |
-| `termino task done <task>` | Move a task to Done |
+| `termino task done <task>` | Move a task to Done (the column named "Done", else the last column) |
+| `termino task sprint <task> <sprint>` | Put a task in a sprint |
 | `termino my-tasks [--member]` | Tasks assigned to you across projects |
 | `termino member add <name> [--kind human\|agent]` / `list` / `remove <member>` | Manage members |
 | `termino column add <name>` / `list` / `rename` / `reorder` / `delete` / `wip <column> <limit>` | Manage columns (`wip … 0` removes the limit) |
-| `termino sprint new <name> [--start --end]` / `list` / `start <sprint>` / `close <sprint> [--unfinished backlog\|next_sprint]` | Manage sprints |
+| `termino sprint new <name> [--start --end]` / `list` / `start <sprint>` / `close <sprint> [--unfinished backlog\|next_sprint]` / `add <sprint> <task>...` | Manage sprints |
 | `termino import [path] [--watch]` | Import Markdown checkbox tasks (Kiro `tasks.md`, `odd/tasks/*.md`, any `- [ ]` list); `--watch` keeps syncing |
 | `termino widget` | Print the status-bar summary |
-| `termino widget install` / `uninstall` | Add/remove the widget block in `~/.bashrc` or `~/.zshrc` |
+| `termino widget install [--shell bash\|zsh]` / `uninstall` | Add/remove the widget block in `~/.bashrc` or `~/.zshrc` |
 | `termino connect <agent>` / `termino disconnect <agent>` | Connect/disconnect an agent integration (`kiro`) |
 | `termino mcp [--actor --read-only]` | Run the MCP server on stdio |
-| `termino theme <name>` | Set the colour theme (`default`, `spooky`, or your own) |
+| `termino theme [name]` | List themes (current marked `*`), or set one (`default`, `spooky`, or your own) |
 | `termino doctor` | Diagnose the installation |
 | `termino uninstall [--purge]` | Remove integrations; `--purge` also deletes data and config |
 | `termino version` | Print the version |
 | `termino completion <shell>` | Shell completion script |
 
 Tasks are referenced as `KEY-N`, `N` / `#N` (current project) or by ID;
-columns, members and sprints by ID or case-insensitive name.
+columns, members and sprints by ID or case-insensitive name. Column names are
+unique per project, ignoring case.
+
+The "current project" is the one associated with the working directory
+(`project new --path` / `--associate-pwd`, longest matching path wins); outside
+any associated directory it is the project last created or selected.
 
 ## Configuration
 

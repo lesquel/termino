@@ -49,3 +49,15 @@ func TestWIPExceeded(t *testing.T) {
 		t.Error("a column without a limit never exceeds WIP")
 	}
 }
+
+func TestDoneColumnPrefersColumnNamedDone(t *testing.T) {
+	cols := []boarddomain.Column{
+		{ID: "todo", Name: "To Do", Position: 0},
+		{ID: "done", Name: "done", Position: 1},
+		{ID: "archive", Name: "Archive", Position: 2},
+	}
+	got, ok := boarddomain.DoneColumn(cols)
+	if !ok || got.ID != "done" {
+		t.Errorf("DoneColumn() = (%q, %v), want the column named Done", got.ID, ok)
+	}
+}

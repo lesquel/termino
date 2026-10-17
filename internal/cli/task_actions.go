@@ -12,14 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newTaskGroupCmd returns `termino task move|assign|done`. Tasks are given as
+// newTaskGroupCmd returns `termino task move|assign|done|sprint`. Tasks are given as
 // KEY-N, N (current project) or a task ID; columns and members by name or ID.
 func newTaskGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "task",
-		Short: "Move, assign or finish a task without opening the TUI",
+		Short: "Move, assign, finish or plan a task without opening the TUI",
 	}
-	cmd.AddCommand(newTaskMoveCmd(), newTaskAssignCmd(), newTaskDoneCmd())
+	cmd.AddCommand(newTaskMoveCmd(), newTaskAssignCmd(), newTaskDoneCmd(), newTaskSprintCmd())
 	return cmd
 }
 
@@ -114,6 +114,17 @@ func newTaskDoneCmd() *cobra.Command {
 			keys, _ := projectKeys(ctx)
 			fmt.Printf("✓ %s done\n", taskRef(keys, t))
 			return nil
+		},
+	}
+}
+
+func newTaskSprintCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "sprint <task> <sprint>",
+		Short: "Put a task in a sprint",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return putTaskInSprint(context.Background(), args[0], args[1])
 		},
 	}
 }

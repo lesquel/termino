@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
@@ -140,5 +141,37 @@ func TestGetBoardWithTasks_GroupsFullTasksByColumnInBoardOrder(t *testing.T) {
 		if ids[i] != full[i].ID {
 			t.Errorf("index %d: id %q does not match task %q", i, ids[i], full[i].ID)
 		}
+	}
+}
+
+func TestAddColumnRejectsDuplicateNameIgnoringCase(t *testing.T) {
+	uc := newBoardUC(newInMemoryBoardRepo(), newInMemoryTaskRepo())
+	ctx := context.Background()
+	if _, err := uc.AddColumn(ctx, testActor(), "proj-1", "Review", 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err := uc.AddColumn(ctx, testActor(), "proj-1", "  review ", 1)
+	if !errors.Is(err, application.ErrDuplicateColumnName) {
+		t.Fatalf("err = %v, want ErrDuplicateColumnName", err)
+	}
+	// Same name in another project is fine.
+	if _, err := uc.AddColumn(ctx, testActor(), "proj-2", "Review", 0); err != nil {
+		t.Errorf("other project: %v", err)
+	}
+}
+
+func TestRenameColumnRejectsDuplicateNameIgnoringCase(t *testing.T) {
+	uc := newBoardUC(newInMemoryBoardRepo(), newInMemoryTaskRepo())
+	ctx := context.Background()
+	a, _ := uc.AddColumn(ctx, testActor(), "proj-1", "Todo", 0)
+	if _, err := uc.AddColumn(ctx, testActor(), "proj-1", "Done", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := uc.RenameColumn(ctx, testActor(), a.ID, "DONE"); !errors.Is(err, application.ErrDuplicateColumnName) {
+		t.Fatalf("err = %v, want ErrDuplicateColumnName", err)
+	}
+	// Renaming a column to a different case of its own name is allowed.
+	if err := uc.RenameColumn(ctx, testActor(), a.ID, "TODO"); err != nil {
+		t.Errorf("self rename: %v", err)
 	}
 }

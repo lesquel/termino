@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
 	"github.com/spf13/cobra"
 )
@@ -88,6 +89,9 @@ func newColumnListCmd() *cobra.Command {
 				wip := ""
 				if c.WIPLimit != nil {
 					wip = fmt.Sprintf("WIP %d", *c.WIPLimit)
+					if boarddomain.WIPExceeded(board, c) {
+						wip += fmt.Sprintf(" (exceeded: %d/%d)", len(board.Tasks[c.ID]), *c.WIPLimit)
+					}
 				}
 				fmt.Printf("  %s\t%d task(s)\t%s\n", sanitize.Line(c.Name), len(board.Tasks[c.ID]), wip)
 			}

@@ -4,7 +4,9 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +16,10 @@ import (
 
 // Actor is a type alias so callers can use the application package directly.
 type Actor = sharedomain.Actor
+
+// ErrMemberExists is returned when a member name is already taken (names are
+// compared ignoring case).
+var ErrMemberExists = errors.New("member already exists")
 
 // MemberUseCases groups all member-related use cases.
 type MemberUseCases struct {
@@ -32,6 +38,15 @@ func (uc *MemberUseCases) CreateMember(
 	name string,
 	kind memberdomain.Kind,
 ) (memberdomain.Member, error) {
+	existing, err := uc.members.List(ctx)
+	if err != nil {
+		return memberdomain.Member{}, fmt.Errorf("list members: %w", err)
+	}
+	for _, e := range existing {
+		if strings.EqualFold(strings.TrimSpace(e.Name), strings.TrimSpace(name)) {
+			return memberdomain.Member{}, fmt.Errorf("%w: a member named %q already exists", ErrMemberExists, e.Name)
+		}
+	}
 	m := memberdomain.Member{
 		ID:        uuid.NewString(),
 		Name:      name,

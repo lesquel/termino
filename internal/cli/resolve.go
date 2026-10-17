@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	sprintdomain "github.com/lesquel/termino/internal/features/sprint/domain"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	widgetapp "github.com/lesquel/termino/internal/features/widget/application"
 	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
@@ -30,16 +33,50 @@ func cleanName(what, raw string) (string, error) {
 	return name, nil
 }
 
-// currentProjectID returns the configured current project.
+// errNoCurrentProject is returned when neither the working directory nor the
+// config names a project.
+var errNoCurrentProject = errors.New("no current project set — run `termino project new` first")
+
+// currentProjectID returns the project commands act on: the project
+// associated with the working directory (longest path prefix) wins, the
+// configured current project is the fallback. The widget uses the same rule.
 func currentProjectID() (string, error) {
 	cfg, err := globalContainer.Config()
 	if err != nil {
 		return "", err
 	}
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		uc, err := globalContainer.WidgetUseCases()
+		if err != nil {
+			return "", err
+		}
+		projectID, err := uc.ResolveProject(cwd, cfg.CurrentProjectID)
+		if errors.Is(err, widgetapp.ErrNoProject) {
+			return "", errNoCurrentProject
+		}
+		if err != nil {
+			return "", err
+		}
+		return projectID, nil
+	}
 	if cfg.CurrentProjectID == "" {
-		return "", fmt.Errorf("no current project set — run `termino project new` first")
+		return "", errNoCurrentProject
 	}
 	return cfg.CurrentProjectID, nil
+}
+
+// projectKey returns the key of the project with the given ID.
+func projectKey(ctx context.Context, projectID string) (string, error) {
+	keys, err := projectKeys(ctx)
+	if err != nil {
+		return "", err
+	}
+	key, ok := keys[projectID]
+	if !ok {
+		return "", fmt.Errorf("project %s not found (archived?)", projectID)
+	}
+	return key, nil
 }
 
 // projectKeys maps project IDs to their keys.

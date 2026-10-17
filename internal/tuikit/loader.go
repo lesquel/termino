@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pelletier/go-toml/v2"
@@ -101,4 +103,32 @@ func parseTheme(data []byte) (*Theme, error) {
 		BorderStyle: border,
 		Symbols:     symbols,
 	}, nil
+}
+
+// Available returns the sorted names of every theme Load can find: the
+// embedded themes plus the .toml files in userThemesDir (may be empty).
+func Available(userThemesDir string) []string {
+	seen := map[string]bool{}
+	if entries, err := embeddedThemes.ReadDir("themes"); err == nil {
+		for _, e := range entries {
+			if name, ok := strings.CutSuffix(e.Name(), ".toml"); ok && !e.IsDir() {
+				seen[name] = true
+			}
+		}
+	}
+	if userThemesDir != "" {
+		if entries, err := os.ReadDir(userThemesDir); err == nil {
+			for _, e := range entries {
+				if name, ok := strings.CutSuffix(e.Name(), ".toml"); ok && !e.IsDir() {
+					seen[name] = true
+				}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

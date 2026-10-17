@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	sharedomain "github.com/lesquel/termino/internal/domain"
@@ -79,6 +80,9 @@ func (uc *BoardUseCases) AddColumn(
 	projectID, name string,
 	position int,
 ) (boarddomain.Column, error) {
+	if err := uc.ensureUniqueName(ctx, projectID, "", name); err != nil {
+		return boarddomain.Column{}, err
+	}
 	col := boarddomain.Column{
 		ID:        uuid.NewString(),
 		ProjectID: projectID,
@@ -101,8 +105,27 @@ func (uc *BoardUseCases) RenameColumn(
 	if err != nil {
 		return fmt.Errorf("find column: %w", err)
 	}
+	if err := uc.ensureUniqueName(ctx, col.ProjectID, col.ID, name); err != nil {
+		return err
+	}
 	col.Name = name
 	return uc.board.SaveColumn(ctx, col)
+}
+
+// ensureUniqueName rejects name when another column of the project (other
+// than exceptID) already uses it, ignoring case and surrounding spaces.
+func (uc *BoardUseCases) ensureUniqueName(ctx context.Context, projectID, exceptID, name string) error {
+	cols, err := uc.board.ListColumns(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("list columns: %w", err)
+	}
+	want := strings.TrimSpace(name)
+	for _, c := range cols {
+		if c.ID != exceptID && strings.EqualFold(strings.TrimSpace(c.Name), want) {
+			return fmt.Errorf("%w: a column named %q already exists", ErrDuplicateColumnName, c.Name)
+		}
+	}
+	return nil
 }
 
 // ReorderColumns sets new positions for all columns in a project.
@@ -158,6 +181,10 @@ var ErrColumnNotFound = boarddomain.ErrColumnNotFound
 
 // ErrColumnNotEmpty is re-exported for convenience.
 var ErrColumnNotEmpty = boarddomain.ErrColumnNotEmpty
+
+// ErrDuplicateColumnName is returned when a column name is already used in
+// the project (names are compared ignoring case).
+var ErrDuplicateColumnName = errors.New("duplicate column name")
 
 // ErrWIPLimitExceeded is returned when adding a task would breach the column limit.
 var ErrWIPLimitExceeded = errors.New("WIP limit exceeded")

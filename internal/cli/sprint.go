@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sprintapp "github.com/lesquel/termino/internal/features/sprint/application"
+	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/platform/sanitize"
 	"github.com/spf13/cobra"
 )
@@ -16,14 +17,14 @@ const (
 	defaultSprintLength = 14 * 24 * time.Hour
 )
 
-// newSprintCmd returns `termino sprint new|list|start|close` for the current
+// newSprintCmd returns `termino sprint new|list|start|close|add` for the current
 // project. Sprints are given by name (ignoring case) or ID.
 func newSprintCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sprint",
 		Short: "Plan and run sprints in the current project",
 	}
-	cmd.AddCommand(newSprintNewCmd(), newSprintListCmd(), newSprintStartCmd(), newSprintCloseCmd())
+	cmd.AddCommand(newSprintNewCmd(), newSprintListCmd(), newSprintStartCmd(), newSprintCloseCmd(), newSprintAddCmd())
 	return cmd
 }
 
@@ -110,9 +111,17 @@ func newSprintListCmd() *cobra.Command {
 				fmt.Println("No sprints yet. Run `termino sprint new <name>`.")
 				return nil
 			}
+			taskUC, err := globalContainer.TaskUseCases()
+			if err != nil {
+				return err
+			}
 			for _, s := range sprints {
-				fmt.Printf("  %s\t%s\t%s → %s\n", sanitize.Line(s.Name), s.State,
-					s.StartsAt.Format(dateLayout), s.EndsAt.Format(dateLayout))
+				tasks, err := taskUC.ListTasks(context.Background(), taskdomain.TaskFilter{ProjectID: projectID, SprintID: s.ID})
+				if err != nil {
+					return fmt.Errorf("list sprint tasks: %w", err)
+				}
+				fmt.Printf("  %s\t%s\t%s → %s\t%d task(s)\n", sanitize.Line(s.Name), s.State,
+					s.StartsAt.Format(dateLayout), s.EndsAt.Format(dateLayout), len(tasks))
 			}
 			return nil
 		},
@@ -180,4 +189,42 @@ func newSprintCloseCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&unfinished, "unfinished", string(sprintapp.UnfinishedToBacklog), "Where unfinished tasks go: backlog or next_sprint")
 	return cmd
+}
+
+func newSprintAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add <sprint> <task>...",
+		Short: "Put tasks in a sprint",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, ref := range args[1:] {
+				if err := putTaskInSprint(context.Background(), ref, args[0]); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// putTaskInSprint assigns the referenced task to a sprint of its own project.
+func putTaskInSprint(ctx context.Context, taskRefArg, sprintRef string) error {
+	t, err := resolveTask(ctx, taskRefArg)
+	if err != nil {
+		return err
+	}
+	s, err := resolveSprint(ctx, t.ProjectID, sprintRef)
+	if err != nil {
+		return err
+	}
+	uc, err := globalContainer.SprintUseCases()
+	if err != nil {
+		return err
+	}
+	if err := uc.AddTaskToSprint(ctx, cliActor(), t.ID, s.ID); err != nil {
+		return err
+	}
+	keys, _ := projectKeys(ctx)
+	fmt.Printf("✓ %s added to sprint %s\n", taskRef(keys, t), sanitize.Line(s.Name))
+	return nil
 }
