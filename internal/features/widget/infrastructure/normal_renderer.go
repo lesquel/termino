@@ -1,68 +1,91 @@
 package infrastructure
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	widgetdomain "github.com/lesquel/termino/internal/features/widget/domain"
 )
 
-// NormalRenderer renders the widget for medium terminals (60 <= width <= 120).
-// Output: project header + task list with ref and truncated title.
+// NormalRenderer renders the widget for medium terminals (60 <= width <= 120):
+// project header, per-column counts, titled task lists and the board hint.
 type NormalRenderer struct{}
 
 // NewNormalRenderer returns a NormalRenderer.
 func NewNormalRenderer() *NormalRenderer { return &NormalRenderer{} }
 
-// Render formats summary with ref + title per task.
+// Render formats summary with ref, title and (when set) due date per task.
 func (r *NormalRenderer) Render(summary widgetdomain.Summary, width int) (string, error) {
-	accent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7c3aed"))
-	refStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#e0e0e0"))
-
-	var sb strings.Builder
-	sb.WriteString(accent.Render(fmt.Sprintf("%s (%s)", summary.ProjectName, summary.ProjectKey)))
-	sb.WriteString("\n")
-
-	maxTitle := width - 16
-	if maxTitle < 10 {
-		maxTitle = 10
-	}
-
-	tasks := mergeUnique(summary.AssignedTasks, summary.InProgressTasks)
-	if len(tasks) == 0 {
-		sb.WriteString(refStyle.Render("  no active tasks"))
-		return sb.String(), nil
-	}
-	for _, t := range tasks {
-		title := t.Title
-		if len(title) > maxTitle {
-			title = title[:maxTitle-1] + "…"
-		}
-		sb.WriteString(fmt.Sprintf("  %s  %s\n",
-			refStyle.Render(t.Ref),
-			titleStyle.Render(title),
-		))
-	}
-	return strings.TrimRight(sb.String(), "\n"), nil
+	return renderList(summary, width, false), nil
 }
 
-// mergeUnique merges two slices, deduplicating by Ref.
-func mergeUnique(a, b []widgetdomain.TaskSummary) []widgetdomain.TaskSummary {
-	seen := make(map[string]struct{}, len(a)+len(b))
-	result := make([]widgetdomain.TaskSummary, 0, len(a)+len(b))
-	for _, t := range a {
-		if _, ok := seen[t.Ref]; !ok {
-			seen[t.Ref] = struct{}{}
-			result = append(result, t)
+// renderList draws the normal and wide layouts. wide adds aligned title,
+// due-date and column fields; the due field is dropped when no listed task
+// has a due date.
+func renderList(s widgetdomain.Summary, width int, wide bool) string {
+	st := newStyles()
+	var lines []string
+	lines = append(lines, st.accent.Render(clip(header(s), width)))
+	if counts := countsLine(s); counts != "" {
+		lines = append(lines, st.muted.Render(clip(counts, width)))
+	}
+
+	secs := sections(s)
+	if hint := emptyState(s, secs); hint != "" {
+		lines = append(lines, "  "+st.title.Render(hint))
+		return strings.Join(lines, "\n")
+	}
+
+	refW := refWidth(secs)
+	showDue := anyDue(secs)
+	const dueW = 7 // "overdue"
+	colW := 0
+	if wide {
+		for _, sec := range secs {
+			for _, t := range sec.tasks {
+				colW = max(colW, len([]rune(t.ColumnName)))
+			}
 		}
 	}
-	for _, t := range b {
-		if _, ok := seen[t.Ref]; !ok {
-			seen[t.Ref] = struct{}{}
-			result = append(result, t)
+	// Fixed cells: indent, ref, gaps, and the optional due/column fields.
+	fixed := 2 + refW + 2
+	if wide {
+		fixed += 2 + colW
+		if showDue {
+			fixed += 2 + dueW
 		}
 	}
-	return result
+	titleW := max(width-fixed, 10)
+	if wide {
+		titleW = min(titleW, 50)
+	}
+
+	for _, sec := range secs {
+		lines = append(lines, st.heading.Render(sec.title))
+		for _, t := range sec.tasks {
+			due := dueLabel(t.DueDate)
+			var b strings.Builder
+			b.WriteString("  " + st.muted.Render(pad(t.Ref, refW)) + "  ")
+			if wide {
+				b.WriteString(st.title.Render(pad(t.Title, titleW)))
+				if showDue {
+					if due == "" {
+						due = "—"
+					}
+					b.WriteString("  " + st.due.Render(pad(due, dueW)))
+				}
+				b.WriteString("  " + st.column.Render(t.ColumnName))
+			} else {
+				title := t.Title
+				if due != "" {
+					title = clip(title, titleW-len(due)-3)
+					b.WriteString(st.title.Render(title) + st.muted.Render(" · ") + st.due.Render(due))
+				} else {
+					b.WriteString(st.title.Render(clip(title, titleW)))
+				}
+			}
+			lines = append(lines, strings.TrimRight(b.String(), " "))
+		}
+	}
+	lines = append(lines, st.muted.Render(boardHint))
+	return strings.Join(lines, "\n")
 }

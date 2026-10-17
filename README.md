@@ -135,6 +135,30 @@ tools `create_task`, `update_task`, `move_task`, `assign_task`, `claim_task`,
 exposes only the read tools; `--actor <name>` sets the agent identity
 (default: the MCP client name).
 
+### Widget
+
+`termino widget` prints a short summary of the current project when a shell
+starts (after `termino widget install`):
+
+```text
+Web app (WEB)
+Backlog 3 · In Progress 1 · Done 2
+In progress
+  WEB-4  Fix login redirect
+My tasks
+  WEB-7  Write the release notes · 2d
+→ termino board
+```
+
+It lists what is in progress, your tasks (assigned to `user_name`) and open
+tasks due within a week. When nothing is in progress or assigned it shows the
+next tasks of the first column, so open work is never hidden; a project
+without tasks shows `No tasks yet — termino add "..."`. Wide terminals add
+due-date (only when a listed task has one) and column fields; terminals
+narrower than 60 columns get a three-line version. Colors follow `NO_COLOR`
+and are dropped when the output is not a terminal. The summary is read-only
+and gives up silently after 100 ms.
+
 ## CLI reference
 
 Run `termino <command> --help` for full flags.
@@ -158,7 +182,7 @@ Run `termino <command> --help` for full flags.
 | `termino column add <name>` / `list` / `rename` / `reorder` / `delete` / `wip <column> <limit>` | Manage columns (`wip … 0` removes the limit) |
 | `termino sprint new <name> [--start --end]` / `list` / `start <sprint>` / `close <sprint> [--unfinished backlog\|next_sprint]` / `add <sprint> <task>...` | Manage sprints |
 | `termino import [path] [--watch]` | Import Markdown checkbox tasks (Kiro `tasks.md`, `odd/tasks/*.md`, any `- [ ]` list); `--watch` keeps syncing |
-| `termino widget` | Print the status-bar summary |
+| `termino widget` | Print the project summary (see [Widget](#widget)) |
 | `termino widget install [--shell bash\|zsh]` / `uninstall` | Add/remove the widget block in `~/.bashrc` or `~/.zshrc` |
 | `termino connect <agent>` / `termino disconnect <agent>` | Connect/disconnect an agent integration (`kiro`) |
 | `termino mcp [--actor --read-only]` | Run the MCP server on stdio |

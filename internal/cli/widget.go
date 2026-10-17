@@ -78,8 +78,14 @@ func renderWidget() error {
 
 	// The project associated with the working directory wins; the configured
 	// current project is the fallback.
+	// "My tasks" are those assigned to the configured user (member ID or
+	// name), falling back to the built-in CLI member.
+	actor := strings.TrimSpace(cfg.UserName)
+	if actor == "" {
+		actor = "cli"
+	}
 	cwd, _ := os.Getwd()
-	summary, err := uc.GetSummary(ctx, cfg.CurrentProjectID, "cli", cwd)
+	summary, err := uc.GetSummary(ctx, cfg.CurrentProjectID, actor, cwd)
 	if errors.Is(err, widgetapp.ErrNoProject) {
 		return fmt.Errorf("%w — run `termino project new --associate-pwd` first", err)
 	}

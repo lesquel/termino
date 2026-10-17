@@ -1,4 +1,8 @@
 Termino (TER)
+Backlog 1 · In Progress 2 · Done 4
+In progress
   TER-1  Implement widget renderers
-  TER-2  Write tests for adapters
   TER-3  Fix the polling bug in the board
+My tasks
+  TER-2  Write tests for adapters · overdue
+→ termino board
