@@ -100,6 +100,21 @@ func (uc *TaskUseCases) CreateTask(
 	actor Actor,
 	input CreateTaskInput,
 ) (taskdomain.Task, error) {
+	// A task without a column would be invisible on the board (and "" is not a
+	// valid columns(id) reference), so default to the first column.
+	if input.ColumnID == "" {
+		cols, err := uc.board.ListColumns(ctx, input.ProjectID)
+		if err != nil {
+			return taskdomain.Task{}, fmt.Errorf("list columns: %w", err)
+		}
+		var first boarddomain.Column
+		for i, c := range cols {
+			if i == 0 || c.Position < first.Position {
+				first = c
+			}
+		}
+		input.ColumnID = first.ID
+	}
 	num, err := uc.tasks.NextNumber(ctx, input.ProjectID)
 	if err != nil {
 		return taskdomain.Task{}, fmt.Errorf("next number: %w", err)

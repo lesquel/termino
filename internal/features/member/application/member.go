@@ -66,3 +66,31 @@ func (uc *MemberUseCases) DeleteMember(
 ) error {
 	return uc.members.Delete(ctx, id)
 }
+
+// EnsureMember returns the member identified by name, registering it with the
+// given kind when it does not exist yet. An existing member whose ID or name
+// equals name is reused, so the call is idempotent and safe on every write.
+// The new member's ID is name itself, keeping agent identities readable in
+// activity and assignee fields.
+func (uc *MemberUseCases) EnsureMember(
+	ctx context.Context,
+	name string,
+	kind memberdomain.Kind,
+) (memberdomain.Member, error) {
+	if m, err := uc.members.FindByID(ctx, name); err == nil {
+		return m, nil
+	}
+	if m, err := uc.members.FindByName(ctx, name); err == nil {
+		return m, nil
+	}
+	m := memberdomain.Member{
+		ID:        name,
+		Name:      name,
+		Kind:      kind,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := uc.members.Save(ctx, m); err != nil {
+		return memberdomain.Member{}, fmt.Errorf("register member %q: %w", name, err)
+	}
+	return m, nil
+}

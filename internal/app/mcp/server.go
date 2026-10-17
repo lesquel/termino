@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 
@@ -19,6 +18,8 @@ import (
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	agentapp "github.com/lesquel/termino/internal/features/agent/application"
 	agentdomain "github.com/lesquel/termino/internal/features/agent/domain"
+	memberapp "github.com/lesquel/termino/internal/features/member/application"
+	memberdomain "github.com/lesquel/termino/internal/features/member/domain"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
@@ -30,8 +31,10 @@ type Deps struct {
 	BoardUC   *boardapp.BoardUseCases
 	TaskUC    *taskapp.TaskUseCases
 	AgentUC   *agentapp.AgentUseCases
+	MemberUC  *memberapp.MemberUseCases
 	Logger    *slog.Logger
-	// ActorOverride is set from --actor flag before serving.
+	// ActorOverride is the agent identity from the --actor flag. When empty the
+	// MCP client name sent in the initialize request is used.
 	ActorOverride string
 	// ReadOnly disables the 9 write tools when true.
 	ReadOnly bool
@@ -43,16 +46,6 @@ func NewServer(deps Deps) *server.MCPServer {
 		"termino",
 		"1.0.0",
 	)
-
-	// Parse --actor and --read-only from os.Args before the server loop.
-	for i, arg := range os.Args {
-		if arg == "--actor" && i+1 < len(os.Args) {
-			deps.ActorOverride = os.Args[i+1]
-		}
-		if arg == "--read-only" {
-			deps.ReadOnly = true
-		}
-	}
 
 	// Register the 5 read tools (always available).
 	s.AddTool(listProjectsTool(), makeListProjectsHandler(deps))
@@ -87,19 +80,35 @@ func Serve(s *server.MCPServer, logger *slog.Logger) error {
 
 // --- Helper ---
 
-func resolveActor(deps Deps, clientName string) sharedomain.Actor {
-	name := deps.ActorOverride
-	if name == "" {
-		name = clientName
+// actorName returns the calling agent's identity: the --actor override, else
+// the client name from the MCP initialize request, else "agent".
+func actorName(ctx context.Context, deps Deps) string {
+	if deps.ActorOverride != "" {
+		return deps.ActorOverride
 	}
-	if name == "" {
-		name = "agent"
+	if s, ok := server.ClientSessionFromContext(ctx).(server.SessionWithClientInfo); ok {
+		if name := strings.TrimSpace(s.GetClientInfo().Name); name != "" {
+			return name
+		}
 	}
-	return sharedomain.Actor{
-		ID:   name,
-		Name: name,
-		Kind: sharedomain.ActorKindAgent,
+	return "agent"
+}
+
+// resolveActor returns the calling agent as an actor and makes sure it is
+// registered as a member (kind agent), since activity, comments and assignees
+// reference members(id) under foreign keys.
+func resolveActor(ctx context.Context, deps Deps) (sharedomain.Actor, error) {
+	name := actorName(ctx, deps)
+	actor := sharedomain.Actor{ID: name, Name: name, Kind: sharedomain.ActorKindAgent}
+	if deps.MemberUC == nil {
+		return actor, nil
 	}
+	m, err := deps.MemberUC.EnsureMember(ctx, name, memberdomain.KindAgent)
+	if err != nil {
+		return sharedomain.Actor{}, err
+	}
+	actor.ID = m.ID
+	return actor, nil
 }
 
 func textResult(v any) (*mcplib.CallToolResult, error) {
@@ -311,10 +320,7 @@ func makeMyTasksHandler(deps Deps) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		actorID := req.GetString("actor_id", "")
 		if actorID == "" {
-			actorID = deps.ActorOverride
-		}
-		if actorID == "" {
-			actorID = "agent"
+			actorID = actorName(ctx, deps)
 		}
 		tasks, err := deps.TaskUC.MyTasks(ctx, actorID)
 		if err != nil {
@@ -334,7 +340,10 @@ func makeCreateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing title: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		priority := taskdomain.Priority(req.GetString("priority", "medium"))
 		input := taskapp.CreateTaskInput{
 			ProjectID:   projectID,
@@ -361,7 +370,10 @@ func makeUpdateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing task_id: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		input := taskapp.UpdateTaskInput{TaskID: taskID}
 		if v := req.GetString("title", ""); v != "" {
 			input.Title = &v
@@ -392,7 +404,10 @@ func makeMoveTaskHandler(deps Deps) server.ToolHandlerFunc {
 			return errResult(fmt.Errorf("missing target_column_id: %w", err))
 		}
 		position := req.GetFloat("position", 0)
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		if err := deps.TaskUC.MoveTask(ctx, actor, taskID, colID, position); err != nil {
 			return errResult(err)
 		}
@@ -407,7 +422,10 @@ func makeAssignTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing task_id: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		var assigneeID *string
 		if v := req.GetString("assignee_id", ""); v != "" {
 			assigneeID = &v
@@ -430,7 +448,10 @@ func makeClaimTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 
 		// Find the in-progress column (position 1 or named "In Progress"/"En Progreso").
 		board, err := deps.BoardUC.GetBoard(ctx, projectID)
@@ -469,7 +490,10 @@ func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 
 		board, err := deps.BoardUC.GetBoard(ctx, projectID)
 		if err != nil {
@@ -498,7 +522,10 @@ func makeAddCommentHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing body: %w", err))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		comment, err := deps.TaskUC.AddComment(ctx, actor, taskID, body)
 		if err != nil {
 			return errResult(err)
@@ -524,7 +551,10 @@ func makeDeleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 			}
 			return errResult(fmt.Errorf("Pass confirm: true to delete task %s", ref))
 		}
-		actor := resolveActor(deps, "")
+		actor, err := resolveActor(ctx, deps)
+		if err != nil {
+			return errResult(err)
+		}
 		if err := deps.TaskUC.DeleteTask(ctx, actor, taskID, confirm); err != nil {
 			return errResult(err)
 		}

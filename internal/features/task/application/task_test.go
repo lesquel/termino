@@ -52,6 +52,23 @@ func TestCreateTask_HappyPath(t *testing.T) {
 	}
 }
 
+func TestCreateTask_DefaultsToFirstColumn(t *testing.T) {
+	boardRepo := newInMemoryBoardRepo()
+	_ = boardRepo.SaveColumn(context.Background(), boarddomain.Column{ID: "col-done", ProjectID: "proj-1", Name: "Done", Position: 2})
+	_ = boardRepo.SaveColumn(context.Background(), boarddomain.Column{ID: "col-backlog", ProjectID: "proj-1", Name: "Backlog", Position: 0})
+	uc := newTaskUC(newInMemoryTaskRepo(), newInMemoryCommentRepo(), newInMemoryActivityRepo(), boardRepo)
+
+	in := defaultInput()
+	in.ColumnID = ""
+	task, err := uc.CreateTask(context.Background(), testActor(), in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if task.ColumnID != "col-backlog" {
+		t.Errorf("column = %q, want first column %q", task.ColumnID, "col-backlog")
+	}
+}
+
 func TestCreateTask_NumbersIncrement(t *testing.T) {
 	uc := newTaskUC(newInMemoryTaskRepo(), newInMemoryCommentRepo(), newInMemoryActivityRepo(), newInMemoryBoardRepo())
 	t1, _ := uc.CreateTask(context.Background(), testActor(), defaultInput())

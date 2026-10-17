@@ -1,14 +1,19 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
+	"strings"
+
 	appmcp "github.com/lesquel/termino/internal/app/mcp"
 	"github.com/lesquel/termino/internal/platform/logging"
+	"github.com/spf13/cobra"
 )
 
 // newMCPCmd returns `termino mcp` — starts the MCP server on stdio.
 func newMCPCmd() *cobra.Command {
-	var readOnly bool
+	var (
+		readOnly bool
+		actor    string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -32,14 +37,20 @@ func newMCPCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			memberUC, err := globalContainer.MemberUseCases()
+			if err != nil {
+				return err
+			}
 
 			deps := appmcp.Deps{
-				ProjectUC: projectUC,
-				BoardUC:   boardUC,
-				TaskUC:    taskUC,
-				AgentUC:   agentUC,
-				Logger:    logging.Logger,
-				ReadOnly:  readOnly,
+				ProjectUC:     projectUC,
+				BoardUC:       boardUC,
+				TaskUC:        taskUC,
+				AgentUC:       agentUC,
+				MemberUC:      memberUC,
+				Logger:        logging.Logger,
+				ActorOverride: strings.TrimSpace(actor),
+				ReadOnly:      readOnly,
 			}
 
 			s := appmcp.NewServer(deps)
@@ -48,5 +59,6 @@ func newMCPCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&readOnly, "read-only", false, "Start in read-only mode (disables write tools)")
+	cmd.Flags().StringVar(&actor, "actor", "", "Agent identity for activity and presence (default: MCP client name)")
 	return cmd
 }
