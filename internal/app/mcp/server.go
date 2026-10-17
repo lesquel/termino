@@ -545,6 +545,11 @@ func makeCreateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing title: %w", err))
 		}
+		if deps.ProjectUC != nil {
+			if _, err := deps.ProjectUC.GetProject(ctx, projectID); err != nil {
+				return errResult(fmt.Errorf("project %q not found — call list_projects for project IDs", projectID))
+			}
+		}
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {
 			return errResult(err)

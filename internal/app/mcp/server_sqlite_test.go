@@ -234,3 +234,14 @@ func TestWriteTools_SQLite_RejectInvalidInput(t *testing.T) {
 	task := callTool(t, c, "create_task", map[string]any{"project_id": env.project.ID, "title": "Task"})
 	callToolErr(t, c, "update_task", map[string]any{"task_id": task["ID"], "priority": "urgent"})
 }
+
+// An unknown project_id (e.g. the project key instead of its ID) is a clear
+// error that points at list_projects, not a raw database constraint.
+func TestCreateTask_SQLite_UnknownProjectIsClear(t *testing.T) {
+	env := newSQLiteEnv(t, "")
+	c := connect(t, env.deps, "kiro")
+	msg := callToolErr(t, c, "create_task", map[string]any{"project_id": "WEB", "title": "Task"})
+	if strings.Contains(msg, "FOREIGN KEY") || !strings.Contains(msg, "list_projects") {
+		t.Errorf("error = %q, want a not-found error pointing at list_projects", msg)
+	}
+}
