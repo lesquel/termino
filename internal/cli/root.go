@@ -50,6 +50,7 @@ func init() {
 		newUninstallCmd(),
 		newDoctorCmd(),
 		newThemeCmd(),
+		newVersionCmd(),
 	)
 	// Suppress Cobra's default "Error:" prefix — our commands handle their own output.
 	rootCmd.SilenceErrors = true
