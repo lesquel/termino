@@ -126,8 +126,8 @@ func TestTaskSprintPutsTaskInSprint(t *testing.T) {
 
 func TestSetupRegistersUserAsMemberForMyTasks(t *testing.T) {
 	tmp, env := isolatedEnv(t)
-	// name, project name, key, associate cwd, (no agents found), widget, theme
-	answers := "Leo\nDemo\nDEM\nn\nn\nspooky\n"
+	// name, project name, key, methodology, associate cwd, theme, widget
+	answers := "Leo\nDemo\nDEM\n\nn\nspooky\nn\n"
 	if out, errOut, err := runWithStdin(t, tmp, env, answers, "setup"); err != nil {
 		t.Fatalf("setup: %v\n%s\n%s", err, out, errOut)
 	}

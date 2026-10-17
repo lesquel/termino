@@ -167,3 +167,35 @@ func TestChangeMethodology(t *testing.T) {
 		t.Fatalf("change: %v", err)
 	}
 }
+
+func TestUpdateProjectKeepsIDAndKey(t *testing.T) {
+	ctx := context.Background()
+	uc := newProjectUC()
+	p, err := uc.CreateProject(ctx, testActor(), application.CreateProjectInput{Key: "WEB", Name: "Web", AssociatedPath: "/old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := uc.UpdateProject(ctx, testActor(), application.UpdateProjectInput{
+		ID: p.ID, Name: "Web App", Methodology: projectdomain.MethodologyScrum, AssociatedPath: "/new",
+	})
+	if err != nil {
+		t.Fatalf("UpdateProject: %v", err)
+	}
+	if got.ID != p.ID || got.Key != "WEB" || got.Name != "Web App" ||
+		got.Methodology != projectdomain.MethodologyScrum || got.AssociatedPath != "/new" {
+		t.Fatalf("updated project = %+v", got)
+	}
+	list, _ := uc.ListProjects(ctx)
+	if len(list) != 1 {
+		t.Fatalf("projects = %d, want 1 (update must not duplicate)", len(list))
+	}
+	if _, err := uc.UpdateProject(ctx, testActor(), application.UpdateProjectInput{ID: "missing", Name: "x"}); err == nil {
+		t.Fatal("updating a missing project should fail")
+	}
+	if found, err := uc.ProjectByKey(ctx, "WEB"); err != nil || found.ID != p.ID {
+		t.Fatalf("ProjectByKey = %+v, %v", found, err)
+	}
+	if found, err := uc.GetProject(ctx, p.ID); err != nil || found.Name != "Web App" {
+		t.Fatalf("GetProject = %+v, %v", found, err)
+	}
+}

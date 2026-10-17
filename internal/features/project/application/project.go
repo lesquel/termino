@@ -126,6 +126,47 @@ func (uc *ProjectUseCases) ChangeMethodology(
 	return uc.projects.Save(ctx, p)
 }
 
+// UpdateProjectInput is the input DTO for UpdateProject. The key is not part
+// of it: task IDs (KEY-N) are derived from it, so it never changes.
+type UpdateProjectInput struct {
+	ID             string
+	Name           string
+	Methodology    projectdomain.MethodologyKind // "" keeps the current one
+	AssociatedPath string                        // "" removes the association
+}
+
+// UpdateProject changes an existing project's name, methodology and
+// associated path in place, keeping its ID, key and columns.
+func (uc *ProjectUseCases) UpdateProject(
+	ctx context.Context,
+	actor Actor,
+	input UpdateProjectInput,
+) (projectdomain.Project, error) {
+	p, err := uc.projects.FindByID(ctx, input.ID)
+	if err != nil {
+		return projectdomain.Project{}, fmt.Errorf("find project: %w", err)
+	}
+	p.Name = input.Name
+	if input.Methodology != "" {
+		p.Methodology = input.Methodology
+	}
+	p.AssociatedPath = input.AssociatedPath
+	if err := uc.projects.Save(ctx, p); err != nil {
+		return projectdomain.Project{}, fmt.Errorf("save project: %w", err)
+	}
+	return p, nil
+}
+
+// GetProject returns the non-archived project with the given ID.
+func (uc *ProjectUseCases) GetProject(ctx context.Context, id string) (projectdomain.Project, error) {
+	return uc.projects.FindByID(ctx, id)
+}
+
+// ProjectByKey returns the non-archived project with the given key.
+func (uc *ProjectUseCases) ProjectByKey(ctx context.Context, key string) (projectdomain.Project, error) {
+	return uc.projects.FindByKey(ctx, key)
+}
+
 // ArchiveProject marks a project as archived.
 func (uc *ProjectUseCases) ArchiveProject(
 	ctx context.Context,

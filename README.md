@@ -44,7 +44,7 @@ Windows) for linux, darwin and windows on amd64 and arm64, and a
 ## Quick start
 
 ```sh
-termino setup                               # user name, first project, widget, agents
+termino setup                               # wizard: name, project, theme, widget
 termino project new --name "Web app" --key WEB --associate-pwd
 termino add Fix login redirect --priority high   # quotes are optional
 termino ls                                  # list the tasks of the current project
@@ -52,6 +52,34 @@ termino                                     # open the board
 termino widget install                      # status summary in bash/zsh prompt
 termino connect kiro                        # register the MCP server in Kiro
 ```
+
+### Setup
+
+`termino setup` opens a full-screen wizard (8 steps, `esc`/`shift+tab` goes
+back, `ctrl+c` quits without changing anything): your name (default `$USER`),
+project name (default: the current directory's name), project key (suggested
+from the name, e.g. "Web App" → `WA`, validated as you type), methodology
+(kanban or scrum), whether to associate the current directory, a theme with a
+live board preview, and the bash/zsh shell widget (fish is not supported yet
+and is skipped). A summary shows every choice before anything is written.
+
+Re-running it offers **Edit current setup**, **Add another project** or
+**Cancel**. Editing updates the current project in place (name, methodology,
+directory association) and never creates a duplicate; the key stays
+read-only because existing task IDs (`KEY-N`) use it — add another project
+for a new key.
+
+Without a terminal, or with `--no-tui`, setup asks line by line with defaults
+in brackets. For scripts, `--yes` applies flags plus defaults without asking;
+every value is validated first, so a bad flag writes nothing:
+
+```sh
+termino setup --yes --name Ana --project "Web App" --key WA \
+  --methodology scrum --theme spooky --no-associate --widget
+```
+
+With `--yes` on an existing setup it edits the current project, or the
+project whose `--key` you pass; a `--key` no project uses yet adds a project.
 
 ### Board keys
 
@@ -109,7 +137,7 @@ Run `termino <command> --help` for full flags.
 |---|---|
 | `termino` | Open the TUI |
 | `termino board` | Open the Kanban board (TUI) |
-| `termino setup` | Interactive setup: user name, first project, integrations |
+| `termino setup [--name --project --key --methodology --theme --associate\|--no-associate --widget --yes --no-tui]` | Setup wizard; re-run to edit the current setup or add a project (see [Setup](#setup)) |
 | `termino project new [--name --key --methodology kanban\|scrum --path --associate-pwd]` | Create a project |
 | `termino project list` | List projects (current marked `*`) |
 | `termino project use <key>` | Make a project the current one |

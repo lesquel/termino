@@ -12,7 +12,7 @@ import (
 // Activity from the CLI is attributed to the setup user's member, not "cli".
 func TestActivityIsAttributedToSetupUser(t *testing.T) {
 	tmp, env := isolatedEnv(t)
-	answers := "Leo\nDemo\nDEM\nn\nn\nspooky\n"
+	answers := "Leo\nDemo\nDEM\n\nn\nspooky\nn\n"
 	if out, errOut, err := runWithStdin(t, tmp, env, answers, "setup"); err != nil {
 		t.Fatalf("setup: %v\n%s\n%s", err, out, errOut)
 	}
