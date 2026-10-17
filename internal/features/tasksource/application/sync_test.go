@@ -3,6 +3,7 @@ package application_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -262,6 +263,44 @@ func TestWatchImported_SyncsFileChangesAndStopsCleanly(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("watcher did not stop after context cancellation")
 	}
+}
+
+func TestWatchFiles_ReportsEachSync(t *testing.T) {
+	e := newEnv(t)
+	path := e.write(t, "tasks.md", "- [ ] One\n")
+	e.importFile(t, path)
+
+	var mu sync.Mutex
+	var reports []string
+	e.svc.WithOnSync(func(file string, imported, updated int) {
+		mu.Lock()
+		defer mu.Unlock()
+		reports = append(reports, fmt.Sprintf("%s %d %d", filepath.Base(file), imported, updated))
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	files := []tasksourcedomain.SourceFile{{Path: path, AdapterName: e.src.Name()}}
+	done, err := e.svc.WatchFiles(ctx, actor, projectID, files, []tasksourcedomain.TaskSource{e.src})
+	if err != nil {
+		t.Fatalf("WatchFiles: %v", err)
+	}
+	e.write(t, "tasks.md", "- [ ] One\n- [ ] Two\n")
+	if !waitFor(t, 5*time.Second, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, r := range reports {
+			if r == "tasks.md 1 0" {
+				return true
+			}
+		}
+		return false
+	}) {
+		mu.Lock()
+		t.Errorf("no sync report for the new task; got %v", reports)
+		mu.Unlock()
+	}
+	cancel()
+	<-done
 }
 
 func TestWatchImported_NoSourcesIsANoop(t *testing.T) {

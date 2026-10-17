@@ -26,6 +26,7 @@ type SyncService struct {
 	taskUC  *taskapp.TaskUseCases
 	boardUC *boardapp.BoardUseCases
 	log     *slog.Logger
+	onSync  func(file string, imported, updated int)
 }
 
 // NewSyncService constructs a SyncService. It logs through slog.Default()
@@ -40,6 +41,14 @@ func (s *SyncService) WithLogger(l *slog.Logger) *SyncService {
 	if l != nil {
 		s.log = l
 	}
+	return s
+}
+
+// WithOnSync sets a callback run after the watcher re-imports a file that
+// changed the board (imported or updated > 0). It runs on the watcher
+// goroutine; interactive commands use it to report each re-sync.
+func (s *SyncService) WithOnSync(fn func(file string, imported, updated int)) *SyncService {
+	s.onSync = fn
 	return s
 }
 
@@ -335,6 +344,9 @@ func (s *SyncService) WatchFiles(
 					s.log.Error("watcher: import failed", "file", event.Name, "err", err)
 				} else if imported > 0 || updated > 0 {
 					s.log.Info("watcher: synced", "file", event.Name, "imported", imported, "updated", updated)
+					if s.onSync != nil {
+						s.onSync(event.Name, imported, updated)
+					}
 				}
 			case watchErr, ok := <-watcher.Errors:
 				if !ok {

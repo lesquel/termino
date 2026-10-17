@@ -116,6 +116,9 @@ type CommentRepository interface {
 	ListByTask(ctx context.Context, taskID string) ([]Comment, error)
 }
 
+// ErrTaskNotFound is returned when no task has the requested ID.
+var ErrTaskNotFound = errors.New("task not found")
+
 // ErrLabelNotFound is returned when a project has no label with a given name.
 var ErrLabelNotFound = errors.New("label not found")
 

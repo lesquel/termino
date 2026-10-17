@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 
-	sharedomain "github.com/lesquel/termino/internal/domain"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	"github.com/lesquel/termino/internal/platform/config"
@@ -92,7 +91,7 @@ func newProjectNewCmd() *cobra.Command {
 				return err
 			}
 
-			actor := sharedomain.Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
+			actor := cliActor()
 			p, err := uc.CreateProject(context.Background(), actor, projectapp.CreateProjectInput{
 				Key:            key,
 				Name:           name,

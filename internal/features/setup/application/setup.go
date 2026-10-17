@@ -112,10 +112,13 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
+	actorID := "setup"
 	if w.members != nil {
-		if _, err := w.members.EnsureMember(ctx, name, memberdomain.KindHuman); err != nil {
+		member, err := w.members.EnsureMember(ctx, name, memberdomain.KindHuman)
+		if err != nil {
 			return fmt.Errorf("register member %q: %w", name, err)
 		}
+		actorID = member.ID
 	}
 	fmt.Fprintf(w.out, "✓ Name saved: %s\n\n", name)
 
@@ -141,7 +144,7 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 		}
 	}
 
-	actor := sharedomain.Actor{ID: "setup", Name: name, Kind: "human"}
+	actor := sharedomain.Actor{ID: actorID, Name: name, Kind: "human"}
 	project, err := w.projectUC.CreateProject(ctx, actor, projectapp.CreateProjectInput{
 		Name:           projectName,
 		Key:            projectKey,

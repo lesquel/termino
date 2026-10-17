@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	sharedomain "github.com/lesquel/termino/internal/domain"
 	tasksourceapp "github.com/lesquel/termino/internal/features/tasksource/application"
 	tasksourcedomain "github.com/lesquel/termino/internal/features/tasksource/domain"
 	kirospecadapter "github.com/lesquel/termino/internal/features/tasksource/infrastructure/kirospec"
@@ -68,10 +67,6 @@ func newSyncService() (*tasksourceapp.SyncService, error) {
 }
 
 func runImport(cmd *cobra.Command, args []string) error {
-	cfg, err := globalContainer.Config()
-	if err != nil {
-		return err
-	}
 	projectID, err := currentProjectID()
 	if err != nil {
 		return err
@@ -84,7 +79,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	actor := sharedomain.Actor{ID: "cli", Name: cfg.UserName, Kind: "human"}
+	actor := cliActor()
 	sources := taskSources()
 
 	var files []tasksourcedomain.SourceFile
@@ -127,6 +122,9 @@ func runImport(cmd *cobra.Command, args []string) error {
 	}
 	watchCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	svc.WithOnSync(func(file string, imported, updated int) {
+		fmt.Printf("Synced %s: %d imported, %d updated\n", filepath.Base(file), imported, updated)
+	})
 	done, err := svc.WatchFiles(watchCtx, actor, projectID, files, sources)
 	if err != nil {
 		return fmt.Errorf("start watcher: %w", err)

@@ -235,7 +235,7 @@ func scanTask(row *sql.Row) (taskdomain.Task, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return taskdomain.Task{}, fmt.Errorf("task not found")
+			return taskdomain.Task{}, taskdomain.ErrTaskNotFound
 		}
 		return taskdomain.Task{}, fmt.Errorf("task scan: %w", err)
 	}

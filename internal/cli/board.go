@@ -4,7 +4,6 @@ import (
 	"context"
 
 	apptui "github.com/lesquel/termino/internal/app/tui"
-	sharedomain "github.com/lesquel/termino/internal/domain"
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/spf13/cobra"
 )
@@ -66,7 +65,7 @@ func startTUI() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sources := taskSources()
-	actor := sharedomain.Actor{ID: "cli", Name: cfg.UserName, Kind: "human"}
+	actor := cliActor()
 	syncSvc, err := newSyncService()
 	if err != nil {
 		return err

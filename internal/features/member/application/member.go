@@ -109,3 +109,22 @@ func (uc *MemberUseCases) EnsureMember(
 	}
 	return m, nil
 }
+
+// LocalActor returns the actor recorded for changes made by the local user:
+// the member registered for userName (setup registers the configured user),
+// matched by ID or name, else the built-in "cli" actor. It never fails, so
+// attribution can always fall back to "cli"; a nil receiver also falls back.
+func (uc *MemberUseCases) LocalActor(ctx context.Context, userName string) Actor {
+	fallback := Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
+	userName = strings.TrimSpace(userName)
+	if uc == nil || userName == "" {
+		return fallback
+	}
+	m, err := uc.members.FindByID(ctx, userName)
+	if err != nil {
+		if m, err = uc.members.FindByName(ctx, userName); err != nil {
+			return fallback
+		}
+	}
+	return Actor{ID: m.ID, Name: m.Name, Kind: sharedomain.ActorKind(m.Kind)}
+}

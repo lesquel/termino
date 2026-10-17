@@ -18,9 +18,18 @@ import (
 	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
-// cliActor is the actor recorded for changes made from the command line.
+// cliActor is the actor recorded for changes made from the command line: the
+// setup user's member when registered, else the built-in "cli" member.
 func cliActor() sharedomain.Actor {
-	return sharedomain.Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
+	userName := ""
+	if cfg, err := globalContainer.Config(); err == nil {
+		userName = cfg.UserName
+	}
+	uc, err := globalContainer.MemberUseCases()
+	if err != nil {
+		uc = nil
+	}
+	return uc.LocalActor(context.Background(), userName)
 }
 
 // cleanName sanitizes a single-line name typed by the user and rejects one

@@ -38,18 +38,20 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
+	removed := 0
 
 	// Process items in reverse order. Only items actually removed leave the
 	// registry; declined or failed ones stay recorded for a later run.
 	for i := len(items) - 1; i >= 0; i-- {
 		item := items[i]
-		if !confirmAction(scanner, fmt.Sprintf("Remove %s (%s)?", item.Kind, item.Path)) {
+		if !confirmAction(scanner, fmt.Sprintf("Remove %s (%s)?", describeItem(item), item.Path)) {
 			continue
 		}
 		if err := removeInstalledItem(item); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: remove %s: %v\n", item.Path, err)
 			continue
 		}
+		removed++
 		if err := reg.Remove(item); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: update registry: %v\n", err)
 		}
@@ -67,6 +69,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 					fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 				} else if err == nil {
+					removed++
 					fmt.Printf("  ✓ Deleted %s\n", p)
 				}
 			}
@@ -74,7 +77,8 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		if confirmAction(scanner, fmt.Sprintf("Delete config %s?", cfgPath)) {
 			if err := os.Remove(cfgPath); err != nil && !os.IsNotExist(err) {
 				fmt.Fprintf(os.Stderr, "warning: %v\n", err)
-			} else {
+			} else if err == nil {
+				removed++
 				fmt.Printf("  ✓ Deleted %s\n", cfgPath)
 			}
 		}
@@ -82,12 +86,17 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 			if err := os.RemoveAll(stateDir); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 			} else {
+				removed++
 				fmt.Printf("  ✓ Deleted %s\n", stateDir)
 			}
 		}
 	}
 
-	fmt.Println("\nUninstall complete.")
+	if removed == 0 {
+		fmt.Println("\nNothing removed.")
+	} else {
+		fmt.Println("\nUninstall complete.")
+	}
 	fmt.Printf("Run: rm %s  to remove the binary.\n", binaryLocation())
 	return nil
 }
@@ -149,6 +158,27 @@ func removeInstalledItem(item setupdomain.InstalledItem) error {
 		return fmt.Errorf("unknown item kind %q", item.Kind)
 	}
 	return nil
+}
+
+// describeItem phrases what removing item does, letting the owning connector
+// describe shared files it only edits (e.g. a termino entry in mcp.json).
+func describeItem(item setupdomain.InstalledItem) string {
+	ci := connectordomain.InstalledItem{
+		Kind:       connectordomain.ItemKind(item.Kind),
+		Path:       item.Path,
+		Marker:     item.Marker,
+		BackupPath: item.BackupPath,
+	}
+	for _, agent := range supportedAgents {
+		conn := resolveConnector(agent)
+		if conn == nil || !conn.Owns(ci) {
+			continue
+		}
+		if d, ok := conn.(connectordomain.Describer); ok {
+			return d.Describe(ci)
+		}
+	}
+	return item.Kind
 }
 
 // confirmAction prints prompt and reads y/N from the scanner. Returns true for "y".

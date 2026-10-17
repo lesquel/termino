@@ -75,6 +75,15 @@ func (c *Connector) Owns(item connectordomain.InstalledItem) bool {
 	}
 }
 
+// Describe phrases what removing item does: the MCP config is shared, so only
+// the termino entry leaves it; the steering file is deleted.
+func (c *Connector) Describe(item connectordomain.InstalledItem) string {
+	if item.Marker == mcpEntryKey {
+		return "termino entry from " + filepath.Base(item.Path)
+	}
+	return "file " + filepath.Base(item.Path)
+}
+
 // Agent returns the agent identifier.
 func (c *Connector) Agent() string { return "kiro" }
 
@@ -190,6 +199,14 @@ func (c *Connector) Disconnect(items []connectordomain.InstalledItem) error {
 			// Remove the termino key from mcp.json.
 			if err := c.removeMCPEntry(item.Path); err != nil {
 				return err
+			}
+			// The entry is gone cleanly, so the pre-install backup is stale.
+			backup := item.BackupPath
+			if backup == "" {
+				backup = item.Path + ".termino-bak"
+			}
+			if err := os.Remove(backup); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove mcp config backup: %w", err)
 			}
 		case item.Marker == steeringMarker:
 			if err := os.Remove(item.Path); err != nil && !os.IsNotExist(err) {

@@ -178,3 +178,16 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+func TestClaimAndCompleteUnknownTaskSayTaskNotFound(t *testing.T) {
+	env := newSQLiteEnv(t, "")
+	c := connect(t, env.deps, "kiro")
+	for _, tool := range []string{"claim_task", "complete_task"} {
+		for _, project := range []string{env.project.ID, "no-such-project"} {
+			msg := callToolErr(t, c, tool, map[string]any{"task_id": "no-such-task", "project_id": project})
+			if !strings.Contains(msg, "task no-such-task not found") || strings.Contains(msg, "column") {
+				t.Errorf("%s (project %s) with a bad task_id = %q, want task not found", tool, project, msg)
+			}
+		}
+	}
+}

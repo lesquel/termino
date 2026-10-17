@@ -64,6 +64,8 @@ type RootModel struct {
 	form     tasktui.FormModel
 	help     HelpModel
 	activity ActivityModel
+
+	actor taskapp.Actor // attribution for changes made in the TUI
 }
 
 // NewRootModel constructs a RootModel and decides the initial screen.
@@ -79,6 +81,7 @@ func NewRootModel(deps RootDeps) RootModel {
 		keys:      keys,
 		deps:      deps,
 		projectID: deps.Config.CurrentProjectID,
+		actor:     deps.MemberUC.LocalActor(context.Background(), deps.Config.UserName),
 	}
 
 	if deps.Config.CurrentProjectID == "" {
@@ -97,7 +100,7 @@ func NewRootModel(deps RootDeps) RootModel {
 // and agent use cases. Nil use cases simply disable the matching feature.
 func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
 	svc := boardtui.Services{
-		Actor:  defaultActor(m.deps.Config),
+		Actor:  m.actor,
 		Motion: m.deps.Config.MotionEnabled(),
 		OnDone: m.deps.OnTaskDone,
 	}
@@ -230,7 +233,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.screen == screenBoard {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "n" {
 			colID := m.currentColumnID()
-			actor := defaultActor(m.deps.Config)
+			actor := m.actor
 			m.form = tasktui.NewFormModel(
 				m.projectID, colID,
 				m.deps.TaskUC, actor,
@@ -243,7 +246,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 			taskID := m.board.SelectedTaskID()
 			if taskID != "" {
-				actor := defaultActor(m.deps.Config)
+				actor := m.actor
 				m.detail = tasktui.NewDetailModel(taskID, m.deps.TaskUC, actor, m.theme, m.keys).
 					WithColumnNames(m.columnNames())
 				m.detail, _ = sized(m.detail, m.sizeMsg())
@@ -405,15 +408,6 @@ func (m RootModel) currentColumnID() string {
 		return cols[idx].ID
 	}
 	return ""
-}
-
-// defaultActor builds a CLI actor from config.
-func defaultActor(cfg *config.Config) taskapp.Actor {
-	name := cfg.UserName
-	if name == "" {
-		name = "cli"
-	}
-	return taskapp.Actor{ID: "cli", Name: name, Kind: "human"}
 }
 
 // Start creates a tea.Program with alt-screen and runs it.

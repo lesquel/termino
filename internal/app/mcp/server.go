@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -669,6 +670,9 @@ func makeClaimTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
 		}
+		if err := requireLiveTask(ctx, deps, taskID); err != nil {
+			return errResult(err)
+		}
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {
 			return errResult(err)
@@ -701,6 +705,17 @@ func makeClaimTaskHandler(deps Deps) server.ToolHandlerFunc {
 	}
 }
 
+// requireLiveTask fails with "task <id> not found" when the task does not
+// exist or is soft-deleted, so callers report the bad ID rather than a
+// later, misleading column lookup failure.
+func requireLiveTask(ctx context.Context, deps Deps, taskID string) error {
+	task, err := deps.TaskUC.FindTaskByID(ctx, taskID)
+	if errors.Is(err, taskdomain.ErrTaskNotFound) || (err == nil && task.DeletedAt != nil) {
+		return fmt.Errorf("task %s not found", taskID)
+	}
+	return err
+}
+
 func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		taskID, err := req.RequireString("task_id")
@@ -710,6 +725,9 @@ func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 		projectID, err := req.RequireString("project_id")
 		if err != nil {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
+		}
+		if err := requireLiveTask(ctx, deps, taskID); err != nil {
+			return errResult(err)
 		}
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {

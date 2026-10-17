@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	sharedomain "github.com/lesquel/termino/internal/domain"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
@@ -58,7 +57,7 @@ func newTaskCmd() *cobra.Command {
 				return err
 			}
 
-			actor := sharedomain.Actor{ID: "cli", Name: "cli", Kind: sharedomain.ActorKindHuman}
+			actor := cliActor()
 			t, err := uc.CreateTask(ctx, actor, taskapp.CreateTaskInput{
 				ProjectID:   projectID,
 				Title:       title,

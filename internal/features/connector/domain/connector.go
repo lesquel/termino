@@ -43,3 +43,10 @@ type Connector interface {
 	// disconnecting one agent never touches another integration's items.
 	Owns(item InstalledItem) bool
 }
+
+// Describer is optionally implemented by connectors to phrase what removing
+// an item does (e.g. "termino entry from mcp.json" for a shared config file),
+// so prompts never suggest deleting a file that is only edited.
+type Describer interface {
+	Describe(item InstalledItem) string
+}
