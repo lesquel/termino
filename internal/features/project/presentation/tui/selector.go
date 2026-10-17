@@ -142,3 +142,8 @@ func (m SelectorModel) View() string {
 	}
 	return m.list.View()
 }
+
+// Filtering reports whether the list filter prompt is consuming keystrokes.
+func (m SelectorModel) Filtering() bool {
+	return m.list.FilterState() == list.Filtering
+}

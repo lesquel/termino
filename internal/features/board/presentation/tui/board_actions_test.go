@@ -345,3 +345,37 @@ func TestBoardMoveToDoneWithoutMotionIsStatic(t *testing.T) {
 		t.Errorf("expected static done text:\n%s", bm.View())
 	}
 }
+
+// movingTaskActions applies moves to the stub repo so a reload reflects them.
+type movingTaskActions struct {
+	fakeTaskActions
+	repo *stubTaskRepo
+}
+
+func (f *movingTaskActions) MoveTask(ctx context.Context, a sharedomain.Actor, taskID, col string, pos float64) error {
+	for i := range f.repo.tasks {
+		if f.repo.tasks[i].ID == taskID {
+			f.repo.tasks[i].ColumnID = col
+			f.repo.tasks[i].Position = pos
+		}
+	}
+	return f.fakeTaskActions.MoveTask(ctx, a, taskID, col, pos)
+}
+
+func TestBoardFocusFollowsMovedCard(t *testing.T) {
+	repo, uc := fixture(t, baseTasks(), nil)
+	actions := &movingTaskActions{repo: repo}
+	m := newLoadedModel(t, uc, boardtui.Services{Tasks: actions}, 120)
+
+	m = press(t, m, "j", "L") // select t2, move it to In Progress
+	bm := m.(boardtui.BoardModel)
+	if bm.ColIndex() != 1 || bm.SelectedTaskID() != "t2" {
+		t.Fatalf("after L focus = col %d task %q, want col 1 task t2", bm.ColIndex(), bm.SelectedTaskID())
+	}
+
+	m = press(t, m, "H")
+	bm = m.(boardtui.BoardModel)
+	if bm.ColIndex() != 0 || bm.SelectedTaskID() != "t2" {
+		t.Errorf("after H focus = col %d task %q, want col 0 task t2", bm.ColIndex(), bm.SelectedTaskID())
+	}
+}

@@ -68,7 +68,9 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		m.titleInput.Width = m.width - 8
+		if m.width > 8 {
+			m.titleInput.Width = m.width - 8
+		}
 
 	case tea.KeyMsg:
 		switch msg.String() {

@@ -109,7 +109,16 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.descTextarea.SetWidth(m.width - 8)
+		if m.width > 8 {
+			m.descTextarea.SetWidth(m.width - 8)
+		}
+		m.scrollY = min(m.scrollY, m.maxScroll())
+
+	case TaskUpdatedMsg:
+		m.editing = false
+		m.titleInput.Blur()
+		m.descTextarea.Blur()
+		return m, loadTask(m.uc, m.taskID)
 
 	case TaskLoadedMsg:
 		if msg.Err != nil {
@@ -141,7 +150,9 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m DetailModel) handleViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
-		m.scrollY++
+		if m.scrollY < m.maxScroll() {
+			m.scrollY++
+		}
 	case "k", "up":
 		if m.scrollY > 0 {
 			m.scrollY--
@@ -226,7 +237,33 @@ func (m DetailModel) View() string {
 	return m.detailView()
 }
 
+// bodyHeight is the number of content lines that fit above the footer. An
+// unknown (zero) terminal height shows all content.
+func (m DetailModel) bodyHeight(total int) int {
+	if m.height <= 0 {
+		return total
+	}
+	return max(m.height-3, 1)
+}
+
+// maxScroll is the largest valid scroll offset for the current content.
+func (m DetailModel) maxScroll() int {
+	n := len(m.contentLines())
+	return max(n-m.bodyHeight(n), 0)
+}
+
 func (m DetailModel) detailView() string {
+	contentLines := m.contentLines()
+	start := min(max(m.scrollY, 0), m.maxScroll())
+	end := min(start+m.bodyHeight(len(contentLines)), len(contentLines))
+	visible := strings.Join(contentLines[start:end], "\n")
+
+	footer := lipgloss.NewStyle().Foreground(m.theme.TextMuted).
+		Render("\ne=edit  ↑↓/jk=scroll  esc=back")
+	return visible + footer
+}
+
+func (m DetailModel) contentLines() []string {
 	t := m.task
 
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Width(14)
@@ -268,28 +305,7 @@ func (m DetailModel) detailView() string {
 		}
 	}
 
-	footer := lipgloss.NewStyle().Foreground(m.theme.TextMuted).
-		Render("\ne=edit  ↑↓/jk=scroll  esc=back")
-
-	content := strings.Join(lines, "\n")
-
-	// Apply scroll.
-	contentLines := strings.Split(content, "\n")
-	maxScroll := len(contentLines) - m.height + 3
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if m.scrollY > maxScroll {
-		m.scrollY = maxScroll
-	}
-	start := m.scrollY
-	end := start + m.height - 3
-	if end > len(contentLines) {
-		end = len(contentLines)
-	}
-	visible := strings.Join(contentLines[start:end], "\n")
-
-	return visible + footer
+	return strings.Split(strings.Join(lines, "\n"), "\n")
 }
 
 func (m DetailModel) editView() string {

@@ -54,6 +54,7 @@ type actionResultMsg struct {
 	verb string // "moved", "assigned", "deleted"
 	task taskdomain.Task
 	to   string // target column or assignee display name
+	toID string // target column ID for moves
 	done bool   // the task landed in the Done column
 	err  error
 }
@@ -122,6 +123,8 @@ type BoardModel struct {
 	statusErr   bool
 	celebration int // remaining animation frames
 	celebrated  string
+
+	focusTaskID string // card to select once the next reload lands
 }
 
 // NewBoardModel creates a new BoardModel for the given project.
@@ -230,6 +233,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.members = msg.Members
 		m.working = msg.Working
 		m.ready = true
+		m.applyFocus()
 		m.clampSelection()
 
 	case tuikit.RefreshMsg:
@@ -277,6 +281,9 @@ func (m BoardModel) handleActionResult(msg actionResultMsg) (tea.Model, tea.Cmd)
 	if msg.err != nil {
 		m.setStatus(fmt.Sprintf("Could not update #%d: %v", msg.task.Number, msg.err), true)
 		return m, nil
+	}
+	if msg.toID != "" {
+		m.followTo(msg.task.ID, msg.toID)
 	}
 	if !msg.done {
 		m.setStatus(fmt.Sprintf("#%d %s %s", msg.task.Number, msg.verb, sanitize.Line(msg.to)), false)
@@ -348,6 +355,33 @@ func (m *BoardModel) clampSelection() {
 	if m.taskIndex >= n {
 		m.taskIndex = max(n-1, 0)
 	}
+}
+
+// followTo moves the selection to the column a card was moved into and
+// remembers the card so the next reload selects it.
+func (m *BoardModel) followTo(taskID, colID string) {
+	for i, col := range m.board.Columns {
+		if col.ID == colID {
+			m.colIndex = i
+			m.focusTaskID = taskID
+			return
+		}
+	}
+}
+
+// applyFocus selects the pending focus card if it is visible in the
+// selected column.
+func (m *BoardModel) applyFocus() {
+	if m.focusTaskID == "" || m.colIndex >= len(m.board.Columns) {
+		return
+	}
+	for i, c := range m.cards(m.board.Columns[m.colIndex].ID) {
+		if c.id == m.focusTaskID {
+			m.taskIndex = i
+			break
+		}
+	}
+	m.focusTaskID = ""
 }
 
 // selectedTask returns the highlighted task when full task data is loaded.
@@ -561,7 +595,7 @@ func (m BoardModel) moveCmd(t taskdomain.Task, col boarddomain.Column) tea.Cmd {
 		if err == nil && isDone && svc.OnDone != nil {
 			svc.OnDone(t.ID)
 		}
-		return actionResultMsg{verb: "moved to", task: t, to: col.Name, done: isDone, err: err}
+		return actionResultMsg{verb: "moved to", task: t, to: col.Name, toID: col.ID, done: isDone, err: err}
 	}
 }
 

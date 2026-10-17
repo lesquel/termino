@@ -105,3 +105,46 @@ func TestDetailModel_StripsTerminalInjectionFromTaskText(t *testing.T) {
 		t.Errorf("sanitized text missing from view: %q", view)
 	}
 }
+
+func TestDetailModel_TinyOrUnknownHeightDoesNotPanic(t *testing.T) {
+	task := taskdomain.Task{ID: "task-1", Number: 3, Title: "Small", Description: "a\nb\nc\nd"}
+	for _, h := range []int{0, 1, 2, 3, 4} {
+		var m tea.Model = tasktui.NewDetailModel("task-1", nil, taskapp.Actor{ID: "cli"}, buildTaskTestTheme(), tuikit.DefaultKeyMap())
+		m, _ = m.Update(tasktui.TaskLoadedMsg{Task: task})
+		if h > 0 {
+			m, _ = m.Update(tea.WindowSizeMsg{Width: 40, Height: h})
+		}
+		for i := 0; i < 5; i++ {
+			m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		}
+		_ = m.View()
+	}
+}
+
+func TestDetailModel_ScrollAndEdit(t *testing.T) {
+	var lines []string
+	for i := 0; i < 50; i++ {
+		lines = append(lines, "line")
+	}
+	task := taskdomain.Task{ID: "task-1", Number: 3, Title: "Long", Description: strings.Join(lines, "\n")}
+	var m tea.Model = tasktui.NewDetailModel("task-1", nil, taskapp.Actor{ID: "cli"}, buildTaskTestTheme(), tuikit.DefaultKeyMap())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	m, _ = m.Update(tasktui.TaskLoadedMsg{Task: task})
+	if !strings.Contains(m.View(), "#3 Long") {
+		t.Fatalf("title should be visible before scrolling:\n%s", m.View())
+	}
+	for i := 0; i < 3; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	}
+	if strings.Contains(m.View(), "#3 Long") {
+		t.Errorf("title should scroll out of view after j:\n%s", m.View())
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if !strings.Contains(m.View(), "Edit Task") {
+		t.Errorf("expected edit view after e:\n%s", m.View())
+	}
+	m, _ = m.Update(tasktui.TaskUpdatedMsg{})
+	if strings.Contains(m.View(), "Edit Task") {
+		t.Errorf("a saved edit should leave edit mode:\n%s", m.View())
+	}
+}

@@ -87,11 +87,7 @@ func NewRootModel(deps RootDeps) RootModel {
 	} else {
 		m.screen = screenBoard
 		m.board = m.newBoard(deps.Config.CurrentProjectID)
-		m.activity = NewActivityModel(
-			deps.Config.CurrentProjectID,
-			activityLoader(deps.TaskUC),
-			th,
-		)
+		m.activity = m.newActivity(deps.Config.CurrentProjectID)
 	}
 	m.help = NewHelpModel(th, keys)
 	return m
@@ -115,6 +111,27 @@ func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
 		svc.Agents = m.deps.AgentUC
 	}
 	return boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(svc)
+}
+
+// newActivity builds the activity panel for projectID.
+func (m RootModel) newActivity(projectID string) ActivityModel {
+	act := NewActivityModel(projectID, activityLoader(m.deps.TaskUC), m.theme)
+	if m.deps.TaskUC != nil {
+		act = act.WithTaskLabeler(taskLabeler(m.deps.TaskUC))
+	}
+	act, _ = sized(act, m.sizeMsg())
+	return act
+}
+
+// taskLabeler resolves a task ID to its "#N" reference.
+func taskLabeler(uc *taskapp.TaskUseCases) TaskLabeler {
+	return func(ctx context.Context, taskID string) string {
+		t, err := uc.FindTaskByID(ctx, taskID)
+		if err != nil {
+			return ""
+		}
+		return fmt.Sprintf("#%d", t.Number)
+	}
 }
 
 // activityLoader wraps the task use case's ListRecentActivity to satisfy ActivityLoader.
@@ -146,16 +163,27 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m.broadcast(msg)
+		return m.resizeAll()
 
 	case tea.KeyMsg:
 		// While the board has a prompt or picker open, every key is input.
 		if m.screen == screenBoard && m.board.Capturing() {
 			return m.routeToActiveScreen(msg)
 		}
+		// While the selector is filtering, every key is typed into the filter.
+		if m.screen == screenProjectSelector && m.selector.Filtering() {
+			return m.routeToActiveScreen(msg)
+		}
 		// Global keys handled at root level.
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q":
+			// q closes the project selector when there is a board to go back to.
+			if m.screen == screenProjectSelector && m.projectID != "" {
+				m.screen = screenBoard
+				return m, nil
+			}
+			return m, tea.Quit
+		case "ctrl+c":
 			return m, tea.Quit
 		case "?":
 			if m.screen != screenHelp {
@@ -166,6 +194,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.screen != screenProjectSelector && m.screen != screenHelp {
 				m.screen = screenProjectSelector
 				m.selector = projecttui.NewSelectorModel(m.deps.ProjectUC, m.theme)
+				m.selector, _ = sized(m.selector, m.sizeMsg())
 				return m, m.selector.Init()
 			}
 		}
@@ -178,16 +207,14 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projectID = msg.ProjectID
 		m.screen = screenBoard
 		m.board = m.newBoard(msg.ProjectID)
-		m.activity = NewActivityModel(
-			msg.ProjectID,
-			activityLoader(m.deps.TaskUC),
-			m.theme,
-		)
+		m.activity = m.newActivity(msg.ProjectID)
+		m.board, _ = sized(m.board, m.boardSizeMsg())
 		return m, tea.Batch(m.board.Init(), m.activity.Init())
 
 	case tasktui.GoBackMsg:
 		m.screen = screenBoard
-		return m, nil
+		// The task may have been edited in the detail view.
+		return m, m.board.Reload()
 
 	case tasktui.FormCancelledMsg:
 		m.screen = screenBoard
@@ -209,6 +236,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.deps.TaskUC, actor,
 				m.theme, m.keys,
 			)
+			m.form, _ = sized(m.form, m.sizeMsg())
 			m.screen = screenForm
 			return m, m.form.Init()
 		}
@@ -217,6 +245,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if taskID != "" {
 				actor := defaultActor(m.deps.Config)
 				m.detail = tasktui.NewDetailModel(taskID, m.deps.TaskUC, actor, m.theme, m.keys)
+				m.detail, _ = sized(m.detail, m.sizeMsg())
 				m.screen = screenTaskDetail
 				return m, m.detail.Init()
 			}
@@ -226,33 +255,55 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m.routeToActiveScreen(msg)
 }
 
-func (m RootModel) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
+// sized feeds a size message to a freshly created sub-model so it never
+// renders with a zero size before the next resize event.
+func sized[T tea.Model](model T, msg tea.WindowSizeMsg) (T, tea.Cmd) {
+	updated, cmd := model.Update(msg)
+	if typed, ok := updated.(T); ok {
+		return typed, cmd
+	}
+	return model, cmd
+}
+
+// sizeMsg is the last known terminal size.
+func (m RootModel) sizeMsg() tea.WindowSizeMsg {
+	return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+}
+
+// boardSizeMsg is the area left for the board once the activity panel, when
+// visible, takes its columns.
+func (m RootModel) boardSizeMsg() tea.WindowSizeMsg {
+	msg := m.sizeMsg()
+	if activityVisibleAt(m.width) {
+		msg.Width -= activityPanelWidth
+	}
+	return msg
+}
+
+// resizeAll propagates the terminal size to the persistent sub-models (board,
+// activity, help) and to the active transient screen. Transient screens
+// (selector, detail, form) are sized again whenever they are created.
+func (m RootModel) resizeAll() (tea.Model, tea.Cmd) {
+	size := m.sizeMsg()
 	var cmds []tea.Cmd
+	var cmd tea.Cmd
+	m.board, cmd = sized(m.board, m.boardSizeMsg())
+	cmds = append(cmds, cmd)
+	m.activity, cmd = sized(m.activity, size)
+	cmds = append(cmds, cmd)
+	m.help, cmd = sized(m.help, size)
+	cmds = append(cmds, cmd)
 	switch m.screen {
 	case screenProjectSelector:
-		updated, cmd := m.selector.Update(msg)
-		m.selector = updated.(projecttui.SelectorModel)
-		cmds = append(cmds, cmd)
-	case screenBoard:
-		updated, cmd := m.board.Update(msg)
-		m.board = updated.(boardtui.BoardModel)
-		cmds = append(cmds, cmd)
-		updated2, cmd2 := m.activity.Update(msg)
-		m.activity = updated2.(ActivityModel)
-		cmds = append(cmds, cmd2)
+		m.selector, cmd = sized(m.selector, size)
 	case screenTaskDetail:
-		updated, cmd := m.detail.Update(msg)
-		m.detail = updated.(tasktui.DetailModel)
-		cmds = append(cmds, cmd)
+		m.detail, cmd = sized(m.detail, size)
 	case screenForm:
-		updated, cmd := m.form.Update(msg)
-		m.form = updated.(tasktui.FormModel)
-		cmds = append(cmds, cmd)
-	case screenHelp:
-		updated, cmd := m.help.Update(msg)
-		m.help = updated.(HelpModel)
-		cmds = append(cmds, cmd)
+		m.form, cmd = sized(m.form, size)
+	default:
+		cmd = nil
 	}
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
