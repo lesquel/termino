@@ -24,6 +24,7 @@ const (
 	minBoardWidth  = 80
 	minBoardHeight = 24
 	columnMinWidth = 20
+	minHeaderName  = 6 // column-name cells kept before a WIP badge shortens
 
 	// celebrationFrames × celebrationInterval stays under 1 s (TRD 10.5).
 	celebrationFrames   = 6
@@ -416,6 +417,15 @@ func (m BoardModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(cols) == 0 {
 		return m, nil
 	}
+	if runes, ok := navigationBurst(msg); ok {
+		// Keys that arrived together in one message (fast typing or key
+		// repeat): apply each navigation key in order.
+		var model tea.Model = m
+		for _, r := range runes {
+			model, _ = model.(BoardModel).handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+		return model, nil
+	}
 	switch msg.String() {
 	case "left", "h":
 		if m.colIndex > 0 {
@@ -461,6 +471,21 @@ func (m BoardModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 	}
 	return m, nil
+}
+
+// navigationBurst returns the runes of a multi-rune key message made only of
+// the h/j/k/l navigation keys. Moves (H/L) are left out: each move is computed
+// from the pre-move selection, so a burst would repeat the same move.
+func navigationBurst(msg tea.KeyMsg) ([]rune, bool) {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) < 2 || msg.Alt || msg.Paste {
+		return nil, false
+	}
+	for _, r := range msg.Runes {
+		if !strings.ContainsRune("hjkl", r) {
+			return nil, false
+		}
+	}
+	return msg.Runes, true
 }
 
 func (m BoardModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -776,28 +801,44 @@ func (m BoardModel) renderColumn(col boarddomain.Column, colIdx int, width int) 
 	}
 
 	// WIP limit status: always text, never color alone (PRD 5.6).
+	name := sanitize.Line(col.Name)
+	headerWidth := width - 4 // column width minus border and padding
 	wipLabel := ""
 	if col.WIPLimit != nil {
 		count := len(m.board.Tasks[col.ID])
+		var style lipgloss.Style
+		var badges []string // longest first; the first that fits is used
 		switch {
 		case boarddomain.WIPExceeded(m.board, col):
 			borderFg = m.theme.Danger
-			wipLabel = lipgloss.NewStyle().Foreground(m.theme.Danger).Bold(true).
-				Render(fmt.Sprintf(" [⚠ %d/%d WIP exceeded]", count, *col.WIPLimit))
+			style = lipgloss.NewStyle().Foreground(m.theme.Danger).Bold(true)
+			badges = []string{
+				fmt.Sprintf(" [⚠ %d/%d WIP exceeded]", count, *col.WIPLimit),
+				fmt.Sprintf(" [⚠ %d/%d over]", count, *col.WIPLimit),
+				fmt.Sprintf(" [⚠ %d/%d]", count, *col.WIPLimit),
+			}
 		case count == *col.WIPLimit:
-			wipLabel = lipgloss.NewStyle().Foreground(m.theme.Warning).
-				Render(fmt.Sprintf(" [%d/%d full]", count, *col.WIPLimit))
+			style = lipgloss.NewStyle().Foreground(m.theme.Warning)
+			badges = []string{
+				fmt.Sprintf(" [%d/%d full]", count, *col.WIPLimit),
+				fmt.Sprintf(" [%d/%d]", count, *col.WIPLimit),
+			}
 		default:
-			wipLabel = lipgloss.NewStyle().Foreground(m.theme.TextMuted).
-				Render(fmt.Sprintf(" [%d/%d]", count, *col.WIPLimit))
+			style = lipgloss.NewStyle().Foreground(m.theme.TextMuted)
+			badges = []string{fmt.Sprintf(" [%d/%d]", count, *col.WIPLimit)}
 		}
+		badge := fitBadge(badges, ansi.StringWidth(name), headerWidth)
+		name = ansi.Truncate(name, max(headerWidth-ansi.StringWidth(badge), 1), "…")
+		wipLabel = style.Render(badge)
+	} else {
+		name = ansi.Truncate(name, max(headerWidth, 1), "…")
 	}
 
 	header := lipgloss.NewStyle().
 		Foreground(headerFg).
 		Bold(selected).
-		Width(width - 2).
-		Render(sanitize.Line(col.Name) + wipLabel)
+		Width(headerWidth).
+		Render(name + wipLabel)
 
 	cs := m.cards(col.ID)
 	taskLines := make([]string, 0, len(cs))
@@ -819,6 +860,17 @@ func (m BoardModel) renderColumn(col boarddomain.Column, colIdx int, width int) 
 	return colStyle.Render(header + "\n" + body)
 }
 
+// fitBadge picks the longest badge that leaves room for the column name (or
+// at least minHeaderName cells of it), so the header never wraps.
+func fitBadge(badges []string, nameWidth, width int) string {
+	for _, b := range badges {
+		if width-ansi.StringWidth(b) >= min(nameWidth, minHeaderName) {
+			return b
+		}
+	}
+	return badges[len(badges)-1]
+}
+
 // renderCard draws "#N Title @assignee", plus a "working" line when an active
 // agent claimed the task. All task text is sanitized before drawing.
 func (m BoardModel) renderCard(c card, selected bool, width int) string {
@@ -835,7 +887,12 @@ func (m BoardModel) renderCard(c card, selected bool, width int) string {
 			working = "  ⚙ " + sanitize.Line(agent) + " working"
 		}
 	}
-	label = ansi.Truncate(label, width, "…")
+	// The selection marker is text, so it survives NO_COLOR (PRD 5.6).
+	marker := "  "
+	if selected {
+		marker = "> "
+	}
+	label = marker + ansi.Truncate(label, width-len(marker), "…")
 
 	style := lipgloss.NewStyle().Width(width)
 	if selected {

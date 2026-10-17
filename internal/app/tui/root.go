@@ -244,7 +244,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			taskID := m.board.SelectedTaskID()
 			if taskID != "" {
 				actor := defaultActor(m.deps.Config)
-				m.detail = tasktui.NewDetailModel(taskID, m.deps.TaskUC, actor, m.theme, m.keys)
+				m.detail = tasktui.NewDetailModel(taskID, m.deps.TaskUC, actor, m.theme, m.keys).
+					WithColumnNames(m.columnNames())
 				m.detail, _ = sized(m.detail, m.sizeMsg())
 				m.screen = screenTaskDetail
 				return m, m.detail.Init()
@@ -308,6 +309,32 @@ func (m RootModel) resizeAll() (tea.Model, tea.Cmd) {
 }
 
 func (m RootModel) routeToActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The board and activity panel keep live-polling behind overlays: their
+	// self-rescheduling refresh tick and async results must reach them, or
+	// the tick chain dies once any other screen is opened.
+	var background tea.Cmd
+	if m.screen != screenBoard && m.projectID != "" && !isInputMsg(msg) {
+		updatedBoard, cmd := m.board.Update(msg)
+		m.board = updatedBoard.(boardtui.BoardModel)
+		updatedAct, cmd2 := m.activity.Update(msg)
+		m.activity = updatedAct.(ActivityModel)
+		background = tea.Batch(cmd, cmd2)
+	}
+	model, cmd := m.routeToScreen(msg)
+	return model, tea.Batch(cmd, background)
+}
+
+// isInputMsg reports whether msg is user input, which only the active screen
+// may receive.
+func isInputMsg(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.KeyMsg, tea.MouseMsg:
+		return true
+	}
+	return false
+}
+
+func (m RootModel) routeToScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case screenProjectSelector:
 		updated, cmd := m.selector.Update(msg)
@@ -360,6 +387,15 @@ func (m RootModel) View() string {
 		return m.help.View()
 	}
 	return ""
+}
+
+// columnNames maps the board's column IDs to their names.
+func (m RootModel) columnNames() map[string]string {
+	names := make(map[string]string)
+	for _, col := range m.board.Board().Columns {
+		names[col.ID] = col.Name
+	}
+	return names
 }
 
 func (m RootModel) currentColumnID() string {

@@ -43,6 +43,7 @@ type DetailModel struct {
 	height   int
 	ready    bool
 	editing  bool
+	columns  map[string]string // column ID → name, for display
 
 	// Edit form fields.
 	titleInput   textinput.Model
@@ -76,6 +77,20 @@ func NewDetailModel(
 		titleInput:   ti,
 		descTextarea: ta,
 	}
+}
+
+// WithColumnNames sets the column names shown instead of column IDs.
+func (m DetailModel) WithColumnNames(names map[string]string) DetailModel {
+	m.columns = names
+	return m
+}
+
+// columnName returns the display name of a column, falling back to its ID.
+func (m DetailModel) columnName(id string) string {
+	if name, ok := m.columns[id]; ok && name != "" {
+		return name
+	}
+	return id
 }
 
 // Init implements tea.Model.
@@ -185,9 +200,11 @@ func (m DetailModel) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.titleInput.Blur()
 		m.descTextarea.Focus()
 		return m, textarea.Blink
+	case "ctrl+s":
+		return m, m.saveEdit()
 	case "enter":
+		// Enter saves from the title; in the description it inserts a newline.
 		if m.editFocused == 0 {
-			// Submit edit.
 			return m, m.saveEdit()
 		}
 	}
@@ -276,7 +293,7 @@ func (m DetailModel) contentLines() []string {
 		titleStyle.Render(ref + " " + sanitize.Line(t.Title)),
 		"",
 		labelStyle.Render("Priority:") + valueStyle.Render(string(t.Priority)),
-		labelStyle.Render("Column:") + valueStyle.Render(t.ColumnID),
+		labelStyle.Render("Column:") + valueStyle.Render(sanitize.Line(m.columnName(t.ColumnID))),
 	}
 	if t.AssigneeID != nil {
 		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(sanitize.Line(*t.AssigneeID)))
@@ -312,13 +329,17 @@ func (m DetailModel) editView() string {
 	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 
+	hint := "enter/ctrl+s=save  tab=switch field  esc=cancel"
+	if m.editFocused == 1 {
+		hint = "ctrl+s=save  enter=newline  tab=switch field  esc=cancel"
+	}
 	return fmt.Sprintf("%s\n\n%s\n%s\n\n%s\n%s\n\n%s",
 		titleStyle.Render("Edit Task"),
 		labelStyle.Render("Title:"),
 		m.titleInput.View(),
 		labelStyle.Render("Description:"),
 		m.descTextarea.View(),
-		lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("enter=save  tab=switch field  esc=cancel"),
+		lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(hint),
 	)
 }
 

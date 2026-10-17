@@ -70,6 +70,9 @@ termino connect kiro                        # register the MCP server in Kiro
 
 Moving a card into the last column (Done) plays a short celebration, unless
 motion is off or `NO_COLOR` is set. Columns over their WIP limit are flagged.
+The selected card is marked with `>`, so the selection stays visible without
+color. In the task detail, `e` edits; `ctrl+s` saves (`enter` also saves from
+the title field, and inserts a newline in the description).
 
 ### Connecting an agent (Kiro)
 
