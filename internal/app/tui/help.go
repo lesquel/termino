@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lesquel/termino/internal/tuikit"
 )
 
@@ -49,18 +50,6 @@ func (m HelpModel) View() string {
 		return ""
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Accent).
-		Bold(true).
-		MarginBottom(1)
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Accent).
-		Width(14)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(m.theme.Text)
-
 	bindings := []key.Binding{
 		m.keys.Up,
 		m.keys.Down,
@@ -79,41 +68,59 @@ func (m HelpModel) View() string {
 		m.keys.Quit,
 	}
 
-	half := (len(bindings) + 1) / 2
-	col1 := make([]string, 0, half)
-	col2 := make([]string, 0, half)
-
+	keyWidth := 0
+	for _, b := range bindings {
+		keyWidth = max(keyWidth, ansi.StringWidth(b.Help().Key))
+	}
+	keyWidth += 2
+	keyStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Width(keyWidth)
+	descStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	lines := make([]string, len(bindings))
 	for i, b := range bindings {
-		line := keyStyle.Render(b.Help().Key) + descStyle.Render(b.Help().Desc)
-		if i < half {
-			col1 = append(col1, line)
-		} else {
-			col2 = append(col2, line)
-		}
+		lines[i] = keyStyle.Render(b.Help().Key) + descStyle.Render(b.Help().Desc)
 	}
 
-	colWidth := (m.width / 2) - 4
-	leftCol := lipgloss.NewStyle().Width(colWidth).Render(strings.Join(col1, "\n"))
-	rightCol := lipgloss.NewStyle().Width(colWidth).Render(strings.Join(col2, "\n"))
-	cols := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, "  ", rightCol)
+	// Two columns when they fit, otherwise one with a compact frame. Lines
+	// are never wrapped, so a key and its description stay together.
+	const gap = "   "
+	half := (len(lines) + 1) / 2
+	left := strings.Join(lines[:half], "\n")
+	right := strings.Join(lines[half:], "\n")
+	frameW := 2 + 4 // border + horizontal padding
+	twoCols := lipgloss.Width(left)+len(gap)+lipgloss.Width(right)+frameW <= m.width
+	cols := strings.Join(lines, "\n")
+	if twoCols {
+		cols = lipgloss.JoinHorizontal(lipgloss.Top, left, gap, right)
+	}
+	compact := !twoCols && len(lines)+8 > m.height
 
+	titleStyle := lipgloss.NewStyle().Foreground(m.theme.Accent).Bold(true)
+	footerStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 	boxStyle := lipgloss.NewStyle().
 		Border(m.theme.BorderStyle).
 		BorderForeground(m.theme.Border).
-		Background(m.theme.SurfaceAlt).
-		Padding(1, 2)
-
-	footer := lipgloss.NewStyle().
-		Foreground(m.theme.TextMuted).
-		MarginTop(1).
-		Render("Press any key to dismiss")
+		Background(m.theme.SurfaceAlt)
+	if compact {
+		boxStyle = boxStyle.Padding(0, 1)
+	} else {
+		boxStyle = boxStyle.Padding(1, 2)
+		titleStyle = titleStyle.MarginBottom(1)
+		footerStyle = footerStyle.MarginTop(1)
+	}
 
 	content := fmt.Sprintf("%s\n%s\n%s",
 		titleStyle.Render("Keyboard Shortcuts"),
 		cols,
-		footer,
+		footerStyle.Render("Press any key to dismiss"),
 	)
-
+	if inner := m.width - 4; inner > 0 {
+		// Last resort on very narrow terminals: cut, never wrap.
+		cut := strings.Split(content, "\n")
+		for i, l := range cut {
+			cut[i] = ansi.Truncate(l, inner, "…")
+		}
+		content = strings.Join(cut, "\n")
+	}
 	box := boxStyle.Render(content)
 
 	return lipgloss.Place(
