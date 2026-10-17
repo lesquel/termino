@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,7 +27,12 @@ func newTaskCmd() *cobra.Command {
 		Short: "Add a new task to the current project",
 		Long: `Add a new task to the current project. Every argument is part of the
 title, so quotes are optional: termino add Fix login redirect`,
-		Args: cobra.MinimumNArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return errors.New("missing task title — e.g. termino add Fix login redirect")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title, desc, prio, err := normalizeTaskInput(strings.Join(args, " "), description, priority)
 			if err != nil {

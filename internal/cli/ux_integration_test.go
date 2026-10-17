@@ -183,3 +183,52 @@ func TestProjectNewPromptsOnSeparateLines(t *testing.T) {
 		t.Errorf("multi-word name or key not read: %q", out)
 	}
 }
+
+// task list prints aligned columns whether or not a task has an assignee.
+func TestTaskListColumnsAreAligned(t *testing.T) {
+	tmp, env := newProjectEnv(t, "WEB", "kanban")
+	mustRun(t, tmp, env, "member", "add", "Ana")
+	mustRun(t, tmp, env, "add", "Fix the login redirect", "--priority", "high", "--label", "bug")
+	mustRun(t, tmp, env, "add", "Docs", "--label", "ops")
+	mustRun(t, tmp, env, "task", "assign", "WEB-1", "Ana")
+	lines := strings.Split(strings.TrimRight(mustRun(t, tmp, env, "ls"), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("ls = %q", lines)
+	}
+	if strings.Contains(lines[0], "\t") {
+		t.Fatalf("ls output still uses raw tabs: %q", lines[0])
+	}
+	for _, field := range []string{"[Backlog]", "WEB-"} {
+		if a, b := strings.Index(lines[0], field), strings.Index(lines[1], field); a != b {
+			t.Errorf("%q starts at %d and %d:\n%s\n%s", field, a, b, lines[0], lines[1])
+		}
+	}
+	if a, b := strings.LastIndex(lines[0], "bug"), strings.LastIndex(lines[1], "ops"); a != b {
+		t.Errorf("labels start at %d and %d:\n%s\n%s", a, b, lines[0], lines[1])
+	}
+}
+
+func TestAddWithoutTitleSaysWhatIsMissing(t *testing.T) {
+	tmp, env := newProjectEnv(t, "WEB", "kanban")
+	errOut := mustFail(t, tmp, env, "add")
+	if !strings.Contains(errOut, "missing task title") {
+		t.Errorf("add without a title = %q", errOut)
+	}
+}
+
+func TestTaskListEmptyNamesTheProject(t *testing.T) {
+	tmp, env := newProjectEnv(t, "WEB", "kanban")
+	if out := mustRun(t, tmp, env, "ls"); !strings.Contains(out, "No tasks in WEB yet") {
+		t.Errorf("empty ls = %q", out)
+	}
+}
+
+// Without a terminal and before setup, `termino` explains what to do and
+// exits instead of opening a full-screen dead end.
+func TestRootBeforeSetupWithoutTerminalPointsToSetup(t *testing.T) {
+	tmp, env := isolatedEnv(t)
+	out := mustRun(t, tmp, env)
+	if !strings.Contains(out, "termino setup") {
+		t.Errorf("termino before setup = %q, want a pointer to termino setup", out)
+	}
+}

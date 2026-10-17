@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
+	"text/tabwriter"
 
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
@@ -99,7 +101,7 @@ func listTasks(ctx context.Context, f taskListFlags) error {
 		return fmt.Errorf("list tasks: %w", err)
 	}
 	if len(tasks) == 0 && f == (taskListFlags{}) {
-		fmt.Println("No tasks yet — add one with `termino add <title>`.")
+		fmt.Printf("No tasks in %s yet — add one with `termino add <title>`.\n", key)
 		return nil
 	}
 	names := memberNames(ctx)
@@ -112,11 +114,15 @@ func listTasks(ctx context.Context, f taskListFlags) error {
 		byColumn[t.ColumnID] = append(byColumn[t.ColumnID], t)
 	}
 	printed := 0
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, col := range columns {
 		for _, t := range byColumn[col.ID] {
-			fmt.Println(formatTaskLine(key, t, col.Name, names))
+			fmt.Fprintln(w, formatTaskLine(key, t, col.Name, names))
 			printed++
 		}
+	}
+	if err := w.Flush(); err != nil {
+		return err
 	}
 	if printed == 0 {
 		fmt.Println("No tasks match.")
@@ -143,23 +149,29 @@ func matchesListFilter(t taskdomain.Task, label string, prio taskdomain.Priority
 	return true
 }
 
-// formatTaskLine renders "  KEY-N  Title  [Column]  priority  @assignee  labels".
+// formatTaskLine renders the tab-separated cells "  KEY-N  Title  [Column]
+// priority  @assignee  labels" for a tabwriter. The assignee cell is always
+// present (empty when unassigned) so labels line up; trailing empty cells
+// are dropped so lines carry no trailing spaces.
 func formatTaskLine(key string, t taskdomain.Task, column string, members map[string]string) string {
-	parts := []string{
-		fmt.Sprintf("  %s-%d", key, t.Number),
-		sanitize.Line(t.Title),
-		"[" + sanitize.Line(column) + "]",
-		string(t.Priority),
-	}
+	assignee := ""
 	if t.AssigneeID != nil {
 		name := members[*t.AssigneeID]
 		if name == "" {
 			name = *t.AssigneeID
 		}
-		parts = append(parts, "@"+sanitize.Line(name))
+		assignee = "@" + sanitize.Line(name)
 	}
-	if len(t.Labels) > 0 {
-		parts = append(parts, strings.Join(sanitizeAll(t.Labels), ","))
+	parts := []string{
+		fmt.Sprintf("  %s-%d", key, t.Number),
+		sanitize.Line(t.Title),
+		"[" + sanitize.Line(column) + "]",
+		string(t.Priority),
+		assignee,
+		strings.Join(sanitizeAll(t.Labels), ","),
+	}
+	for len(parts) > 0 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
 	}
 	return strings.Join(parts, "\t")
 }
