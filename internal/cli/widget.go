@@ -125,31 +125,28 @@ func runWidgetInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Backup the rc file.
-	if err := backupFile(rcPath); err != nil {
-		return fmt.Errorf("backup %s: %w", rcPath, err)
-	}
-
 	// Check if block is already present.
 	content, err := os.ReadFile(rcPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read %s: %w", rcPath, err)
 	}
-	if strings.Contains(string(content), widgetMarker) {
-		fmt.Printf("Widget block already present in %s\n", rcPath)
-		return nil
-	}
-
-	// Append the block.
-	f, err := os.OpenFile(rcPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", rcPath, err)
-	}
-	if _, err := f.WriteString("\n" + widgetBlock); err != nil {
+	present := strings.Contains(string(content), widgetMarker)
+	if !present {
+		// Backup the rc file before modifying it.
+		if err := backupFile(rcPath); err != nil {
+			return fmt.Errorf("backup %s: %w", rcPath, err)
+		}
+		// Append the block.
+		f, err := os.OpenFile(rcPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("open %s: %w", rcPath, err)
+		}
+		if _, err := f.WriteString("\n" + widgetBlock); err != nil {
+			f.Close()
+			return fmt.Errorf("write widget block: %w", err)
+		}
 		f.Close()
-		return fmt.Errorf("write widget block: %w", err)
 	}
-	f.Close()
 
 	// Record in InstallationRegistry.
 	reg, err := loadRegistry()
@@ -164,6 +161,10 @@ func runWidgetInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("record widget install: %w", err)
 	}
 
+	if present {
+		fmt.Printf("Widget block already present in %s\n", rcPath)
+		return nil
+	}
 	fmt.Printf("✓ Widget block added to %s\n", rcPath)
 	fmt.Println("  Restart your shell or run: source", rcPath)
 	return nil

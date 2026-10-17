@@ -118,6 +118,9 @@ func runDisconnect(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// supportedAgents lists the agents resolveConnector knows.
+var supportedAgents = []string{"kiro"}
+
 // resolveConnector returns the Connector for the named agent. The working
 // directory is the project that receives project-level files (Kiro steering).
 func resolveConnector(agent string) connectordomain.Connector {

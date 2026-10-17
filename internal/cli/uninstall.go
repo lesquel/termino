@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/spf13/cobra"
@@ -38,48 +39,20 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// Process items in reverse order.
+	// Process items in reverse order. Only items actually removed leave the
+	// registry; declined or failed ones stay recorded for a later run.
 	for i := len(items) - 1; i >= 0; i-- {
 		item := items[i]
 		if !confirmAction(scanner, fmt.Sprintf("Remove %s (%s)?", item.Kind, item.Path)) {
 			continue
 		}
-
-		switch item.Kind {
-		case "block":
-			marker := item.Marker
-			endMarker := marker[:strings.LastIndex(marker, "-start")] + "-end"
-			if endMarker == marker {
-				endMarker = marker + "-end"
-			}
-			endMarker = strings.Replace(marker, "-start", "-end", 1)
-			if err := removeBlockFromFile(item.Path, marker, endMarker); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: remove block from %s: %v\n", item.Path, err)
-			} else {
-				fmt.Printf("  ✓ Removed block from %s\n", item.Path)
-			}
-		case "file":
-			if err := os.Remove(item.Path); err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "warning: remove %s: %v\n", item.Path, err)
-			} else {
-				fmt.Printf("  ✓ Removed file %s\n", item.Path)
-			}
-		case "dir":
-			if err := os.RemoveAll(item.Path); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: remove dir %s: %v\n", item.Path, err)
-			} else {
-				fmt.Printf("  ✓ Removed directory %s\n", item.Path)
-			}
+		if err := removeInstalledItem(item); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: remove %s: %v\n", item.Path, err)
+			continue
 		}
-	}
-
-	// Clear the registry (write empty, don't delete).
-	emptyReg := setupdomain.NewInstallationRegistry(
-		filepath.Join(config.StateDir(), "installed.json"),
-	)
-	emptyReg.Items = nil
-	if err := emptyReg.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: clear registry: %v\n", err)
+		if err := reg.Remove(item); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: update registry: %v\n", err)
+		}
 	}
 
 	if purge {
@@ -89,10 +62,13 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		stateDir := config.StateDir()
 
 		if confirmAction(scanner, fmt.Sprintf("Delete database %s?", dbPath)) {
-			if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "warning: %v\n", err)
-			} else {
-				fmt.Printf("  ✓ Deleted %s\n", dbPath)
+			// The WAL sidecars belong to the database and go with it.
+			for _, p := range []string{dbPath, dbPath + "-shm", dbPath + "-wal"} {
+				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+					fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+				} else if err == nil {
+					fmt.Printf("  ✓ Deleted %s\n", p)
+				}
 			}
 		}
 		if confirmAction(scanner, fmt.Sprintf("Delete config %s?", cfgPath)) {
@@ -112,7 +88,66 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("\nUninstall complete.")
-	fmt.Println("Run: rm ~/.local/bin/termino  to remove the binary.")
+	fmt.Printf("Run: rm %s  to remove the binary.\n", binaryLocation())
+	return nil
+}
+
+// binaryLocation returns the running executable's path, falling back to the
+// command name when it cannot be resolved.
+func binaryLocation() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "termino"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		return resolved
+	}
+	return exe
+}
+
+// removeInstalledItem undoes one recorded install. Items owned by a
+// connector are removed through it, so shared config files (such as Kiro's
+// mcp.json) only lose the termino entry and are never deleted.
+func removeInstalledItem(item setupdomain.InstalledItem) error {
+	ci := connectordomain.InstalledItem{
+		Kind:       connectordomain.ItemKind(item.Kind),
+		Path:       item.Path,
+		Marker:     item.Marker,
+		BackupPath: item.BackupPath,
+	}
+	for _, agent := range supportedAgents {
+		if conn := resolveConnector(agent); conn != nil && conn.Owns(ci) {
+			if err := conn.Disconnect([]connectordomain.InstalledItem{ci}); err != nil {
+				return err
+			}
+			fmt.Printf("  ✓ Removed %s integration from %s\n", agent, item.Path)
+			return nil
+		}
+	}
+
+	switch item.Kind {
+	case "block":
+		endMarker := strings.Replace(item.Marker, "-start", "-end", 1)
+		if endMarker == item.Marker {
+			endMarker = item.Marker + "-end"
+		}
+		if err := removeBlockFromFile(item.Path, item.Marker, endMarker); err != nil {
+			return err
+		}
+		fmt.Printf("  ✓ Removed block from %s\n", item.Path)
+	case "file":
+		if err := os.Remove(item.Path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		fmt.Printf("  ✓ Removed file %s\n", item.Path)
+	case "dir":
+		if err := os.RemoveAll(item.Path); err != nil {
+			return err
+		}
+		fmt.Printf("  ✓ Removed directory %s\n", item.Path)
+	default:
+		return fmt.Errorf("unknown item kind %q", item.Kind)
+	}
 	return nil
 }
 

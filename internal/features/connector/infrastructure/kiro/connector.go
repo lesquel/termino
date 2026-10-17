@@ -132,10 +132,11 @@ func (c *Connector) Connect(scope connectordomain.Scope) ([]connectordomain.Inst
 		return nil, err
 	}
 
-	// Only add if not already present.
+	// Only add if not already present; an existing entry is still reported
+	// so the registry re-records it.
+	backupPath := mcpPath + ".termino-bak"
 	if _, ok := servers[mcpEntryKey]; !ok {
 		// Back up before modifying.
-		backupPath := mcpPath + ".termino-bak"
 		if err := backupFile(mcpPath, backupPath); err != nil {
 			return nil, fmt.Errorf("backup mcp config: %w", err)
 		}
@@ -151,13 +152,16 @@ func (c *Connector) Connect(scope connectordomain.Scope) ([]connectordomain.Inst
 		if err := writeMCPConfig(mcpPath, doc, servers); err != nil {
 			return nil, err
 		}
-		installed = append(installed, connectordomain.InstalledItem{
-			Kind:       connectordomain.ItemKindFile,
-			Path:       mcpPath,
-			Marker:     mcpEntryKey,
-			BackupPath: backupPath,
-		})
 	}
+	mcpItem := connectordomain.InstalledItem{
+		Kind:   connectordomain.ItemKindFile,
+		Path:   mcpPath,
+		Marker: mcpEntryKey,
+	}
+	if _, err := os.Stat(backupPath); err == nil {
+		mcpItem.BackupPath = backupPath
+	}
+	installed = append(installed, mcpItem)
 
 	// ── Steering file ─────────────────────────────────────────────────────────
 	steeringDir := filepath.Join(steeringBase, "steering")
@@ -191,6 +195,9 @@ func (c *Connector) Disconnect(items []connectordomain.InstalledItem) error {
 			if err := os.Remove(item.Path); err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("remove steering file: %w", err)
 			}
+			// Drop the steering dir too when nothing else lives in it;
+			// os.Remove refuses a non-empty directory.
+			_ = os.Remove(filepath.Dir(item.Path))
 		default:
 			// Unknown item — skip.
 		}

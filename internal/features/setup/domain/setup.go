@@ -64,8 +64,16 @@ func (r *InstallationRegistry) Save() error {
 	return nil
 }
 
-// Record appends an item to the registry and persists the change.
+// Record adds an item to the registry and persists the change. Recording an
+// item already present (same Path and Marker) replaces it, so re-running an
+// install never duplicates entries.
 func (r *InstallationRegistry) Record(item InstalledItem) error {
+	for i, existing := range r.Items {
+		if existing.Path == item.Path && existing.Marker == item.Marker {
+			r.Items[i] = item
+			return r.Save()
+		}
+	}
 	r.Items = append(r.Items, item)
 	return r.Save()
 }

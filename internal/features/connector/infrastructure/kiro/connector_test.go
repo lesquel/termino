@@ -184,9 +184,10 @@ func TestKiroConnector_ConnectIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Connect: %v", err)
 	}
-	// MCP config already present — only steering file should be "installed".
-	if len(items) != 1 {
-		t.Errorf("expected 1 item on second connect (MCP already present), got %d", len(items))
+	// Both artifacts are still reported so the registry re-records them;
+	// the MCP entry itself is not written twice (checked below).
+	if len(items) != 2 {
+		t.Errorf("expected 2 items on second connect (re-registration), got %d", len(items))
 	}
 
 	// Verify only one termino entry.
