@@ -254,3 +254,57 @@ func userMembers(t *testing.T, f fixture) []string {
 	}
 	return names
 }
+
+// A directory association wins over the configured current project, as it
+// does for the board and the CLI, so re-running setup edits the project the
+// user is standing in.
+func TestStateCurrentPrefersDirectoryAssociation(t *testing.T) {
+	f := newFixture(t, "/bin/bash")
+	ctx := context.Background()
+	web, err := f.svc.Apply(ctx, SetupInput{Mode: ModeCreate, UserName: "Ana", ProjectName: "Web", ProjectKey: "WEB", Associate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Apply(ctx, SetupInput{Mode: ModeCreate, UserName: "Ana", ProjectName: "Mobile", ProjectKey: "MOB"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := f.svc.State(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Current == nil || st.Current.ID != web.Project.ID {
+		t.Fatalf("current = %+v, want the project associated with the cwd (WEB)", st.Current)
+	}
+
+	f.svc.getwd = func() (string, error) { return "/elsewhere", nil }
+	st, _ = f.svc.State(ctx)
+	if st.Current == nil || st.Current.Key != "MOB" {
+		t.Fatalf("outside any association current = %+v, want the configured MOB", st.Current)
+	}
+}
+
+func TestAssociatedProjectLongestMatch(t *testing.T) {
+	ps := []projectdomain.Project{
+		{ID: "a", AssociatedPath: "/work"},
+		{ID: "b", AssociatedPath: "/work/web/"},
+		{ID: "c", AssociatedPath: "/work/webapp"},
+		{ID: "d"},
+	}
+	tests := []struct{ cwd, want string }{
+		{"/work/web", "b"},
+		{"/work/web/src", "b"},
+		{"/work/webapp", "c"},
+		{"/work/other", "a"},
+		{"/home", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := ""
+		if p := associatedProject(ps, tt.cwd); p != nil {
+			got = p.ID
+		}
+		if got != tt.want {
+			t.Errorf("associatedProject(%q) = %q, want %q", tt.cwd, got, tt.want)
+		}
+	}
+}

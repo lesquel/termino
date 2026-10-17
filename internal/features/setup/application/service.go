@@ -174,6 +174,11 @@ func (s *Service) State(ctx context.Context) (SetupState, error) {
 			st.Current = &projects[i]
 		}
 	}
+	// The project associated with the working directory wins, as it does for
+	// the board and the CLI, so a re-run edits the project the user is in.
+	if p := associatedProject(projects, st.Cwd); p != nil {
+		st.Current = p
+	}
 	if s.registry != nil {
 		for _, item := range s.registry.Items {
 			if item.Marker == widgetMarker {
@@ -182,6 +187,26 @@ func (s *Service) State(ctx context.Context) (SetupState, error) {
 		}
 	}
 	return st, nil
+}
+
+// associatedProject returns the project whose associated path is cwd or its
+// closest ancestor (longest match wins), or nil.
+func associatedProject(projects []projectdomain.Project, cwd string) *projectdomain.Project {
+	if cwd == "" {
+		return nil
+	}
+	var best *projectdomain.Project
+	bestLen := -1
+	for i, p := range projects {
+		root := strings.TrimRight(p.AssociatedPath, "/")
+		if root == "" {
+			continue
+		}
+		if (cwd == root || strings.HasPrefix(cwd, root+"/")) && len(root) > bestLen {
+			best, bestLen = &projects[i], len(root)
+		}
+	}
+	return best
 }
 
 // Apply validates in completely, then writes: member, project, config and
