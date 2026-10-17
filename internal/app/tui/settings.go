@@ -1,0 +1,330 @@
+package tui
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	setupapp "github.com/lesquel/termino/internal/features/setup/application"
+	setuptui "github.com/lesquel/termino/internal/features/setup/presentation/tui"
+	"github.com/lesquel/termino/internal/platform/config"
+	"github.com/lesquel/termino/internal/tuikit"
+)
+
+// WidgetToggler installs and removes the shell widget block; it is the same
+// use case `termino widget install/uninstall` runs.
+type WidgetToggler interface {
+	Status() (setupapp.WidgetStatus, error)
+	Install() (string, error)
+	Uninstall() (string, error)
+}
+
+// SettingsDeps feeds the settings screen. Zero values fall back to the
+// built-in themes, the theme loader and config.Load/Save; a nil Widget
+// shows the widget row as unavailable.
+type SettingsDeps struct {
+	Themes     []string
+	LoadTheme  func(name string) (*tuikit.Theme, error)
+	SaveConfig func(mutate func(*config.Config)) error
+	Widget     WidgetToggler
+	Home       string // shortens paths under it to "~"
+}
+
+// SettingsClosedMsg asks the root to leave the settings screen.
+type SettingsClosedMsg struct{}
+
+// MotionChangedMsg tells the root that animations were switched on or off.
+type MotionChangedMsg struct{ On bool }
+
+// SettingsModel is the settings screen: theme (with live preview), shell
+// widget and motion. It owns every key while open.
+type SettingsModel struct {
+	theme   *tuikit.Theme // the running theme, shared with every screen
+	deps    SettingsDeps
+	project string
+	key     string
+
+	current string // active theme name
+	motion  bool
+	widget  setupapp.WidgetStatus
+	wErr    string
+
+	cursor    int // themes first, then the widget row, then motion
+	status    string
+	statusErr bool
+	width     int
+	height    int
+}
+
+// NewSettingsModel builds the settings screen for cfg. theme is the running
+// theme: applying a theme overwrites it in place so every screen follows.
+func NewSettingsModel(theme *tuikit.Theme, cfg *config.Config, deps SettingsDeps, project, key string) SettingsModel {
+	if len(deps.Themes) == 0 {
+		deps.Themes = tuikit.Available(userThemesDir())
+	}
+	if deps.LoadTheme == nil {
+		deps.LoadTheme = Load
+	}
+	if deps.SaveConfig == nil {
+		deps.SaveConfig = saveConfig
+	}
+	current := cfg.Theme
+	if current == "" {
+		current = "default"
+	}
+	m := SettingsModel{
+		theme:   theme,
+		deps:    deps,
+		project: project,
+		key:     key,
+		current: current,
+		motion:  cfg.Motion,
+	}
+	for i, n := range deps.Themes {
+		if n == current {
+			m.cursor = i
+		}
+	}
+	m.refreshWidget()
+	return m
+}
+
+// saveConfig applies mutate to the config on disk, so settings changed
+// elsewhere (e.g. the current project) are kept.
+func saveConfig(mutate func(*config.Config)) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	mutate(cfg)
+	return config.Save(cfg)
+}
+
+func (m *SettingsModel) refreshWidget() {
+	m.wErr = ""
+	if m.deps.Widget == nil {
+		m.widget = setupapp.WidgetStatus{}
+		m.wErr = "unavailable"
+		return
+	}
+	st, err := m.deps.Widget.Status()
+	if err != nil {
+		m.wErr = err.Error()
+	}
+	m.widget = st
+}
+
+func (m SettingsModel) widgetRow() int { return len(m.deps.Themes) }
+func (m SettingsModel) motionRow() int { return len(m.deps.Themes) + 1 }
+
+// Init implements tea.Model.
+func (m SettingsModel) Init() tea.Cmd { return nil }
+
+// Update implements tea.Model.
+func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			return m, func() tea.Msg { return SettingsClosedMsg{} }
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < m.motionRow() {
+				m.cursor++
+			}
+		case "enter", " ":
+			return m.activate()
+		}
+	}
+	return m, nil
+}
+
+// activate applies the highlighted theme or flips the highlighted toggle.
+func (m SettingsModel) activate() (tea.Model, tea.Cmd) {
+	switch {
+	case m.cursor < m.widgetRow():
+		m.applyTheme(m.deps.Themes[m.cursor])
+	case m.cursor == m.widgetRow():
+		m.toggleWidget()
+	default:
+		on := !m.motion
+		if err := m.deps.SaveConfig(func(c *config.Config) { c.Motion = on }); err != nil {
+			m.fail("save config: " + err.Error())
+			return m, nil
+		}
+		m.motion = on
+		m.ok("Motion " + onOff(on))
+		return m, func() tea.Msg { return MotionChangedMsg{On: on} }
+	}
+	return m, nil
+}
+
+func (m *SettingsModel) applyTheme(name string) {
+	th, err := m.deps.LoadTheme(name)
+	if err != nil {
+		m.fail(err.Error())
+		return
+	}
+	*m.theme = *th
+	m.current = name
+	if err := m.deps.SaveConfig(func(c *config.Config) { c.Theme = name }); err != nil {
+		m.fail("theme applied but not saved: " + err.Error())
+		return
+	}
+	m.ok("Theme set to " + name)
+}
+
+func (m *SettingsModel) toggleWidget() {
+	if m.deps.Widget == nil {
+		m.fail("shell widget unavailable")
+		return
+	}
+	if !m.widget.Installed && !m.widget.Shell.Supported {
+		m.fail(m.widget.Shell.Note)
+		return
+	}
+	if m.widget.Installed {
+		path, err := m.deps.Widget.Uninstall()
+		if err != nil {
+			m.fail(err.Error())
+		} else {
+			m.ok("Widget removed from " + m.short(path))
+		}
+	} else {
+		path, err := m.deps.Widget.Install()
+		if err != nil {
+			m.fail(err.Error())
+		} else {
+			m.ok("Widget installed in " + m.short(path) + " — open a new shell to see it")
+		}
+	}
+	m.refreshWidget()
+}
+
+func (m *SettingsModel) ok(s string)   { m.status, m.statusErr = "✓ "+s, false }
+func (m *SettingsModel) fail(s string) { m.status, m.statusErr = "✗ "+s, true }
+
+// short replaces the home directory prefix of path with "~".
+func (m SettingsModel) short(path string) string {
+	if m.deps.Home != "" && strings.HasPrefix(path, m.deps.Home+string(os.PathSeparator)) {
+		return "~" + path[len(m.deps.Home):]
+	}
+	return path
+}
+
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
+}
+
+// onOffLabel is onOff capitalised for the settings rows.
+func onOffLabel(on bool) string {
+	if on {
+		return "On"
+	}
+	return "Off"
+}
+
+// View implements tea.Model.
+func (m SettingsModel) View() string {
+	t := m.theme
+	w := m.width
+	if w <= 0 {
+		w = 80
+	}
+	accent := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
+	muted := lipgloss.NewStyle().Foreground(t.TextMuted)
+	text := lipgloss.NewStyle().Foreground(t.Text)
+	sel := lipgloss.NewStyle().Foreground(t.Accent).Bold(true)
+
+	row := func(i int, s string) string {
+		if i == m.cursor {
+			return sel.Render("› " + s)
+		}
+		return text.Render("  " + s)
+	}
+
+	var list []string
+	list = append(list, accent.Render("Theme"))
+	listW := 0
+	for i, n := range m.deps.Themes {
+		label := n
+		if n == m.current {
+			label += " ●"
+		}
+		listW = max(listW, ansi.StringWidth(label)+2)
+		list = append(list, row(i, label))
+	}
+
+	// Preview the highlighted theme, or the active one off the theme list.
+	previewName := m.current
+	if m.cursor < m.widgetRow() {
+		previewName = m.deps.Themes[m.cursor]
+	}
+	var preview string
+	if th, err := m.deps.LoadTheme(previewName); err == nil {
+		pw := w - listW - 5
+		if pw >= 44 {
+			preview = setuptui.RenderPreview(th, m.project, m.key, pw)
+		}
+	}
+	themes := strings.Join(list, "\n")
+	if preview != "" {
+		themes = lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(listW+5).Render(themes), "\n"+preview)
+	}
+
+	widgetState := onOffLabel(m.widget.Installed)
+	widgetInfo := ""
+	switch {
+	case m.wErr != "":
+		widgetState, widgetInfo = "—", m.wErr
+	case m.widget.Installed:
+		widgetInfo = m.widget.Shell.Name + " · " + m.short(m.widget.InstalledPath)
+	case m.widget.Shell.Supported:
+		widgetInfo = m.widget.Shell.Name + " · " + m.short(m.widget.RCPath)
+	default:
+		widgetState, widgetInfo = "—", m.widget.Shell.Name+": not supported yet"
+	}
+	motionInfo := ""
+	if m.motion && os.Getenv("NO_COLOR") != "" {
+		motionInfo = "off while NO_COLOR is set"
+	}
+
+	label := func(s string) string { return fmt.Sprintf("%-14s", s) }
+	lines := []string{
+		accent.Render("Settings"),
+		muted.Render(strings.Repeat("─", max(min(w, 80)-2, 10))),
+		themes,
+		"",
+		row(m.widgetRow(), label("Shell widget")+widgetState) + "  " + muted.Render(widgetInfo),
+		row(m.motionRow(), label("Motion")+onOffLabel(m.motion)) + "  " + muted.Render(motionInfo),
+		"",
+	}
+	if m.status != "" {
+		st := lipgloss.NewStyle().Foreground(t.Success)
+		if m.statusErr {
+			st = lipgloss.NewStyle().Foreground(t.Danger)
+		}
+		lines = append(lines, st.Render(m.status))
+	} else {
+		lines = append(lines, "")
+	}
+	lines = append(lines, muted.Render("↑/↓ move · enter apply/toggle · esc back"))
+
+	out := strings.Split(strings.Join(lines, "\n"), "\n")
+	for i, l := range out {
+		out[i] = ansi.Truncate(l, max(w-2, 10), "…")
+	}
+	return lipgloss.NewStyle().Padding(0, 1).Render(strings.Join(out, "\n"))
+}

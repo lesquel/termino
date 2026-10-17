@@ -839,6 +839,7 @@ var footerHints = []footerHint{
 	{"/", "filter"},
 	{"H/L", "move"},
 	{"a", "assign"},
+	{"s", "settings"},
 	{"m", "move to"},
 	{"d", "delete"},
 	{"p", "projects"},

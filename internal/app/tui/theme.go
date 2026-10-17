@@ -14,6 +14,10 @@ type Theme = tuikit.Theme
 
 // Load loads a theme by name, checking the user themes dir first then embedded.
 func Load(name string) (*Theme, error) {
-	userThemesDir := filepath.Join(config.ConfigDir(), "themes")
-	return tuikit.Load(name, userThemesDir)
+	return tuikit.Load(name, userThemesDir())
+}
+
+// userThemesDir is where user themes live ($XDG_CONFIG_HOME/termino/themes).
+func userThemesDir() string {
+	return filepath.Join(config.ConfigDir(), "themes")
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	xterm "github.com/charmbracelet/x/term"
+	setupapp "github.com/lesquel/termino/internal/features/setup/application"
 	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
 	widgetapp "github.com/lesquel/termino/internal/features/widget/application"
 	widgetdomain "github.com/lesquel/termino/internal/features/widget/domain"
@@ -19,14 +19,6 @@ import (
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/lesquel/termino/internal/platform/logging"
 	"github.com/spf13/cobra"
-)
-
-const (
-	widgetMarker    = "termino-widget-start"
-	widgetMarkerEnd = "termino-widget-end"
-	widgetBlock     = "# --- termino-widget-start ---\n" +
-		"if command -v termino &>/dev/null; then termino widget; fi\n" +
-		"# --- termino-widget-end ---\n"
 )
 
 // newWidgetCmd returns `termino widget` and its subcommands.
@@ -133,41 +125,14 @@ func runWidgetInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	// Check if block is already present.
-	content, err := os.ReadFile(rcPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", rcPath, err)
-	}
-	present := strings.Contains(string(content), widgetMarker)
-	if !present {
-		// Backup the rc file before modifying it.
-		if err := backupFile(rcPath); err != nil {
-			return fmt.Errorf("backup %s: %w", rcPath, err)
-		}
-		// Append the block.
-		f, err := os.OpenFile(rcPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return fmt.Errorf("open %s: %w", rcPath, err)
-		}
-		if _, err := f.WriteString("\n" + widgetBlock); err != nil {
-			f.Close()
-			return fmt.Errorf("write widget block: %w", err)
-		}
-		f.Close()
-	}
-
-	// Record in InstallationRegistry.
 	reg, err := loadRegistry()
 	if err != nil {
 		return err
 	}
-	if err := reg.Record(setupdomain.InstalledItem{
-		Kind:   "block",
-		Path:   rcPath,
-		Marker: widgetMarker,
-	}); err != nil {
-		return fmt.Errorf("record widget install: %w", err)
+
+	present, err := setupapp.InstallWidget(reg, rcPath)
+	if err != nil {
+		return err
 	}
 
 	if present {
@@ -192,33 +157,15 @@ func runWidgetUninstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	items, err := reg.List()
+	path, found, err := setupapp.UninstallWidget(reg)
 	if err != nil {
 		return err
 	}
-
-	var found *setupdomain.InstalledItem
-	for i, item := range items {
-		if item.Kind == "block" && item.Marker == widgetMarker {
-			found = &items[i]
-			break
-		}
-	}
-	if found == nil {
+	if !found {
 		fmt.Println("No widget block found in registry.")
 		return nil
 	}
-
-	if err := removeBlockFromFile(found.Path, widgetMarker, widgetMarkerEnd); err != nil {
-		return fmt.Errorf("remove block from %s: %w", found.Path, err)
-	}
-
-	if err := reg.Remove(*found); err != nil {
-		return fmt.Errorf("update registry: %w", err)
-	}
-
-	fmt.Printf("✓ Widget block removed from %s\n", found.Path)
+	fmt.Printf("✓ Widget block removed from %s\n", path)
 	return nil
 }
 
@@ -263,57 +210,9 @@ func detectShellRC() (string, error) {
 	}
 }
 
-// backupFile copies src to src + ".termino-bak".
-func backupFile(src string) error {
-	data, err := os.ReadFile(src)
-	if os.IsNotExist(err) {
-		return nil // nothing to back up
-	}
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(src+".termino-bak", data, 0600)
-}
-
 // removeBlockFromFile removes lines between the start and end markers (inclusive).
 func removeBlockFromFile(path, startMarker, endMarker string) error {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(f)
-	inside := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, startMarker) {
-			inside = true
-			continue
-		}
-		if strings.Contains(line, endMarker) {
-			inside = false
-			continue
-		}
-		if !inside {
-			lines = append(lines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	f.Close()
-
-	// Remove trailing blank lines that the block left behind.
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	return setupapp.RemoveMarkedBlock(path, startMarker, endMarker)
 }
 
 // loadRegistry returns the loaded InstallationRegistry from the state dir.

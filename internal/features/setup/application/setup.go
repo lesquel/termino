@@ -379,41 +379,9 @@ func contains(names []string, name string) bool {
 	return false
 }
 
-// widgetMarker identifies the widget block in shell rc files; it matches the
-// marker used by `termino widget install` so either path is idempotent.
-const widgetMarker = "termino-widget-start"
-
 // installWidgetBlock adds the shell widget block to rcPath (once) and records
 // it in the registry.
 func installWidgetBlock(registry *setupdomain.InstallationRegistry, rcPath string) error {
-	const block = "\n# --- termino-widget-start ---\n" +
-		"if command -v termino &>/dev/null; then termino widget; fi\n" +
-		"# --- termino-widget-end ---\n"
-
-	existing, err := os.ReadFile(rcPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if !strings.Contains(string(existing), widgetMarker) {
-		if err == nil {
-			if err := os.WriteFile(rcPath+".termino-bak", existing, 0600); err != nil {
-				return fmt.Errorf("backup %s: %w", rcPath, err)
-			}
-		}
-		f, err := os.OpenFile(rcPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return err
-		}
-		_, writeErr := f.WriteString(block)
-		if cerr := f.Close(); writeErr == nil {
-			writeErr = cerr
-		}
-		if writeErr != nil {
-			return writeErr
-		}
-	}
-	if registry == nil {
-		return nil
-	}
-	return registry.Record(setupdomain.InstalledItem{Kind: "block", Path: rcPath, Marker: widgetMarker})
+	_, err := InstallWidget(registry, rcPath)
+	return err
 }

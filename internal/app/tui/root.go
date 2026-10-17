@@ -30,6 +30,7 @@ const (
 	screenTaskDetail
 	screenHelp
 	screenForm
+	screenSettings
 )
 
 // RootDeps holds all dependencies needed to build the root TUI model.
@@ -45,6 +46,8 @@ type RootDeps struct {
 	// OnTaskDone, when set, runs after the board moves a task into the Done
 	// column (used to check the task's checkbox in its source file).
 	OnTaskDone func(taskID string)
+	// Settings feeds the settings screen (key s on the board).
+	Settings SettingsDeps
 }
 
 // RootModel is the top-level Bubble Tea model.
@@ -65,6 +68,7 @@ type RootModel struct {
 	form     tasktui.FormModel
 	help     HelpModel
 	activity ActivityModel
+	settings SettingsModel
 
 	actor taskapp.Actor // attribution for changes made in the TUI
 }
@@ -122,6 +126,15 @@ func (m RootModel) project(id string) (projectdomain.Project, bool) {
 // newBoard builds the board model for projectID wired to the task, member
 // and agent use cases. Nil use cases simply disable the matching feature.
 func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
+	board := boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(m.boardServices())
+	if p, ok := m.project(projectID); ok {
+		board = board.WithProject(p.Name, p.Key)
+	}
+	return board
+}
+
+// boardServices wires the board to the task, member and agent use cases.
+func (m RootModel) boardServices() boardtui.Services {
 	svc := boardtui.Services{
 		Actor:  m.actor,
 		Motion: m.deps.Config.MotionEnabled(),
@@ -136,11 +149,7 @@ func (m RootModel) newBoard(projectID string) boardtui.BoardModel {
 	if m.deps.AgentUC != nil {
 		svc.Agents = m.deps.AgentUC
 	}
-	board := boardtui.NewBoardModel(projectID, m.deps.BoardUC, m.deps.DB, m.theme, m.keys).WithServices(svc)
-	if p, ok := m.project(projectID); ok {
-		board = board.WithProject(p.Name, p.Key)
-	}
-	return board
+	return svc
 }
 
 // newActivity builds the activity panel for projectID.
@@ -213,6 +222,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == screenForm || (m.screen == screenTaskDetail && m.detail.Editing()) {
 			return m.routeToActiveScreen(msg)
 		}
+		// The settings screen owns every key; esc leaves it.
+		if m.screen == screenSettings {
+			return m.routeToActiveScreen(msg)
+		}
 		// While the selector is filtering, every key is typed into the filter.
 		if m.screen == screenProjectSelector && m.selector.Filtering() {
 			return m.routeToActiveScreen(msg)
@@ -244,6 +257,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuikit.DismissHelpMsg:
 		m.screen = screenBoard
+		return m, nil
+
+	case SettingsClosedMsg:
+		m.screen = screenBoard
+		return m, nil
+
+	case MotionChangedMsg:
+		m.deps.Config.Motion = msg.On
+		m.board = m.board.WithServices(m.boardServices())
 		return m, nil
 
 	case projecttui.ProjectSelectedMsg:
@@ -288,6 +310,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.form, _ = sized(m.form, m.sizeMsg())
 			m.screen = screenForm
 			return m, m.form.Init()
+		}
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "s" {
+			p, _ := m.project(m.projectID)
+			m.settings = NewSettingsModel(m.theme, m.deps.Config, m.deps.Settings, p.Name, p.Key)
+			m.settings, _ = sized(m.settings, m.sizeMsg())
+			m.screen = screenSettings
+			return m, nil
 		}
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
 			taskID := m.board.SelectedTaskID()
@@ -352,6 +381,8 @@ func (m RootModel) resizeAll() (tea.Model, tea.Cmd) {
 		m.detail, cmd = sized(m.detail, size)
 	case screenForm:
 		m.form, cmd = sized(m.form, size)
+	case screenSettings:
+		m.settings, cmd = sized(m.settings, size)
 	default:
 		cmd = nil
 	}
@@ -409,6 +440,10 @@ func (m RootModel) routeToScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.help.Update(msg)
 		m.help = updated.(HelpModel)
 		return m, cmd
+	case screenSettings:
+		updated, cmd := m.settings.Update(msg)
+		m.settings = updated.(SettingsModel)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -436,6 +471,8 @@ func (m RootModel) View() string {
 		m.help.width = m.width
 		m.help.height = m.height
 		return m.help.View()
+	case screenSettings:
+		return m.settings.View()
 	}
 	return ""
 }

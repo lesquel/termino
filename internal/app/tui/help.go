@@ -63,6 +63,7 @@ func (m HelpModel) View() string {
 		m.keys.Assign,
 		m.keys.Filter,
 		m.keys.ProjectSelect,
+		m.keys.Settings,
 		m.keys.Help,
 		m.keys.Back,
 		m.keys.Quit,

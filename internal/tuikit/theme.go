@@ -42,6 +42,7 @@ type KeyMap struct {
 	Assign        key.Binding
 	Filter        key.Binding
 	ProjectSelect key.Binding
+	Settings      key.Binding
 	Quit          key.Binding
 	Help          key.Binding
 	Back          key.Binding
@@ -97,6 +98,10 @@ func DefaultKeyMap() KeyMap {
 		ProjectSelect: key.NewBinding(
 			key.WithKeys("p"),
 			key.WithHelp("p", "project selector"),
+		),
+		Settings: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "settings: theme, widget, motion"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),

@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/x/term"
 	apptui "github.com/lesquel/termino/internal/app/tui"
+	setupapp "github.com/lesquel/termino/internal/features/setup/application"
+	setupdomain "github.com/lesquel/termino/internal/features/setup/domain"
+	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/spf13/cobra"
 )
 
@@ -102,11 +106,25 @@ func startTUI(cmd *cobra.Command) error {
 		MemberUC:   memberUC,
 		Theme:      theme,
 		OnTaskDone: onDone,
+		Settings:   settingsDeps(),
 	}
 	runErr := apptui.Start(deps)
 	cancel()
 	<-watchDone
 	return runErr
+}
+
+// settingsDeps wires the board's settings screen: the available themes and
+// the shell widget for $SHELL, toggled through the same use case as
+// `termino widget install/uninstall`.
+func settingsDeps() apptui.SettingsDeps {
+	home, _ := os.UserHomeDir()
+	registry := setupdomain.NewInstallationRegistry(filepath.Join(config.StateDir(), "installed.json"))
+	return apptui.SettingsDeps{
+		Themes: availableThemes(),
+		Widget: setupapp.NewShellWidget(registry, os.Getenv("SHELL"), home),
+		Home:   home,
+	}
 }
 
 // ensureProject reports whether a project exists, running the setup wizard

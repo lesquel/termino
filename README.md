@@ -98,6 +98,7 @@ project whose `--key` you pass; a `--key` no project uses yet adds a project.
 | `n` | New task |
 | `enter` | Task detail |
 | `p` | Project selector |
+| `s` | Settings: theme, shell widget, motion |
 | `?` | Help |
 | `q` / `ctrl+c` | Quit |
 
@@ -119,6 +120,20 @@ saves (`enter` also saves from the title field, and inserts a newline in the
 description). The project selector (`p`) marks the current project; `q` goes
 back to the board. The built-in `CLI` and `System` members are not offered in
 the assign picker.
+
+Settings (`s`) changes three things without leaving the board, each saved to
+`config.toml` and confirmed on a status line (`✓ Theme set to nord`):
+
+- **Theme** — the list previews the highlighted theme; `enter` applies it to
+  the running board at once.
+- **Shell widget** — shows the detected shell and its rc file; `enter`
+  installs or removes the widget block, exactly like `termino widget
+  install`/`uninstall` (fish is not supported yet).
+- **Motion** — turns the Done celebration on or off (always off while
+  `NO_COLOR` is set).
+
+`↑`/`↓` move, `esc` goes back; other keys (`q`, `p`, `?`) do nothing while
+settings is open.
 
 ### Connecting an agent (Kiro)
 
