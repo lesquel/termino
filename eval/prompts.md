@@ -29,9 +29,11 @@ Start every case from a fresh database seeded with:
   - WEB-8 "Remove legacy cron" · Backlog · medium
 - OPS tasks: OPS-1 "Rotate TLS certs" · Backlog · high · ana
 
-Tasks are addressed by key (`WEB-4`); the MCP tools take IDs, so the agent
-resolves keys through `get_board` or `list_tasks` (each task carries its
-`Number`). Lookups listed under **Calls** are the minimum expected; extra
+Tasks are addressed by key (`WEB-4`); the MCP tools take task IDs, so the
+agent resolves task keys through `get_board` or `list_tasks` (each task
+carries its `Number`). Every `project_id` argument accepts either the project
+ID or its key in any case (`WEB`, `web`), so a known project needs no
+`list_projects` lookup. Lookups listed under **Calls** are the minimum expected; extra
 read calls do not fail a case, extra or wrong writes do.
 
 ## How to run
@@ -56,7 +58,7 @@ read calls do not fail a case, extra or wrong writes do.
 ### E02 · Create one task
 
 - **Prompt:** "Add a task to the web project: 'Add CSRF tokens to forms', high priority."
-- **Calls:** `list_projects()` → `create_task(project_id, title, priority)`
+- **Calls:** `create_task(project_id, title, priority)` (project_id `WEB`)
 - **Expected:** a new WEB task in `Backlog` with priority high.
 - **Pass:** exactly one new task in WEB titled "Add CSRF tokens to forms", priority `high`, column Backlog, `created` activity by the agent.
 

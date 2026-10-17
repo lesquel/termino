@@ -342,7 +342,7 @@ func getBoardTool() mcplib.Tool {
 		mcplib.WithDescription("Get the Kanban board with columns and tasks for a project"),
 		mcplib.WithString("project_id",
 			mcplib.Required(),
-			mcplib.Description("The project ID"),
+			mcplib.Description("Project ID or key (e.g. WEB)"),
 		),
 	)
 }
@@ -350,7 +350,7 @@ func getBoardTool() mcplib.Tool {
 func listTasksTool() mcplib.Tool {
 	return mcplib.NewTool("list_tasks",
 		mcplib.WithDescription("List tasks with optional filters"),
-		mcplib.WithString("project_id", mcplib.Description("Filter by project ID")),
+		mcplib.WithString("project_id", mcplib.Description("Filter by project ID or key (e.g. WEB)")),
 		mcplib.WithString("assignee_id", mcplib.Description("Filter by assignee ID")),
 		mcplib.WithString("column_id", mcplib.Description("Filter by column ID")),
 		mcplib.WithString("label_ids", mcplib.Description("Comma-separated label IDs")),
@@ -378,7 +378,7 @@ func myTasksTool() mcplib.Tool {
 func createTaskTool() mcplib.Tool {
 	return mcplib.NewTool("create_task",
 		mcplib.WithDescription("Create a new task on the board"),
-		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID")),
+		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID or key (e.g. WEB)")),
 		mcplib.WithString("title", mcplib.Required(), mcplib.Description("Task title")),
 		mcplib.WithString("description", mcplib.Description("Task description")),
 		mcplib.WithString("priority", mcplib.Description("Priority: low, medium, high, critical")),
@@ -418,7 +418,7 @@ func claimTaskTool() mcplib.Tool {
 	return mcplib.NewTool("claim_task",
 		mcplib.WithDescription("Atomically assign task to calling agent and move to in-progress column"),
 		mcplib.WithString("task_id", mcplib.Required(), mcplib.Description("Task ID")),
-		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID")),
+		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID or key (e.g. WEB)")),
 	)
 }
 
@@ -426,7 +426,7 @@ func completeTaskTool() mcplib.Tool {
 	return mcplib.NewTool("complete_task",
 		mcplib.WithDescription("Move a task to the done column (last column by position)"),
 		mcplib.WithString("task_id", mcplib.Required(), mcplib.Description("Task ID")),
-		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID")),
+		mcplib.WithString("project_id", mcplib.Required(), mcplib.Description("Project ID or key (e.g. WEB)")),
 	)
 }
 
@@ -464,6 +464,9 @@ func makeGetBoardHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
 		}
+		if projectID, err = resolveProjectID(ctx, deps, projectID); err != nil {
+			return errResult(err)
+		}
 		board, err := deps.BoardUC.GetBoard(ctx, projectID)
 		if err != nil {
 			return errResult(err)
@@ -474,8 +477,15 @@ func makeGetBoardHandler(deps Deps) server.ToolHandlerFunc {
 
 func makeListTasksHandler(deps Deps) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		projectID := req.GetString("project_id", "")
+		if projectID != "" {
+			var err error
+			if projectID, err = resolveProjectID(ctx, deps, projectID); err != nil {
+				return errResult(err)
+			}
+		}
 		filter := taskdomain.TaskFilter{
-			ProjectID:  req.GetString("project_id", ""),
+			ProjectID:  projectID,
 			AssigneeID: req.GetString("assignee_id", ""),
 			ColumnID:   req.GetString("column_id", ""),
 			SearchText: sanitize.Line(req.GetString("search_text", "")),
@@ -545,10 +555,8 @@ func makeCreateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(fmt.Errorf("missing title: %w", err))
 		}
-		if deps.ProjectUC != nil {
-			if _, err := deps.ProjectUC.GetProject(ctx, projectID); err != nil {
-				return errResult(fmt.Errorf("project %q not found — call list_projects for project IDs", projectID))
-			}
+		if projectID, err = resolveProjectID(ctx, deps, projectID); err != nil {
+			return errResult(err)
 		}
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {
@@ -678,6 +686,9 @@ func makeClaimTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err := requireLiveTask(ctx, deps, taskID); err != nil {
 			return errResult(err)
 		}
+		if projectID, err = resolveProjectID(ctx, deps, projectID); err != nil {
+			return errResult(err)
+		}
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {
 			return errResult(err)
@@ -710,6 +721,22 @@ func makeClaimTaskHandler(deps Deps) server.ToolHandlerFunc {
 	}
 }
 
+// resolveProjectID maps a project_id argument, which may be a project ID or a
+// project key in any case (e.g. "web" for WEB), to the project's ID. Without a
+// ProjectUC the reference is passed through unchanged.
+func resolveProjectID(ctx context.Context, deps Deps, ref string) (string, error) {
+	if deps.ProjectUC == nil {
+		return ref, nil
+	}
+	if p, err := deps.ProjectUC.GetProject(ctx, ref); err == nil {
+		return p.ID, nil
+	}
+	if p, err := deps.ProjectUC.ProjectByKey(ctx, strings.ToUpper(strings.TrimSpace(ref))); err == nil {
+		return p.ID, nil
+	}
+	return "", fmt.Errorf("project %q not found — call list_projects for project IDs and keys", ref)
+}
+
 // requireLiveTask fails with "task <id> not found" when the task does not
 // exist or is soft-deleted, so callers report the bad ID rather than a
 // later, misleading column lookup failure.
@@ -732,6 +759,9 @@ func makeCompleteTaskHandler(deps Deps) server.ToolHandlerFunc {
 			return errResult(fmt.Errorf("missing project_id: %w", err))
 		}
 		if err := requireLiveTask(ctx, deps, taskID); err != nil {
+			return errResult(err)
+		}
+		if projectID, err = resolveProjectID(ctx, deps, projectID); err != nil {
 			return errResult(err)
 		}
 		actor, err := resolveActor(ctx, deps)

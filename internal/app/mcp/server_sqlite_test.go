@@ -235,13 +235,49 @@ func TestWriteTools_SQLite_RejectInvalidInput(t *testing.T) {
 	callToolErr(t, c, "update_task", map[string]any{"task_id": task["ID"], "priority": "urgent"})
 }
 
-// An unknown project_id (e.g. the project key instead of its ID) is a clear
-// error that points at list_projects, not a raw database constraint.
+// An unknown project reference is a clear error that points at
+// list_projects, not a raw database constraint.
 func TestCreateTask_SQLite_UnknownProjectIsClear(t *testing.T) {
 	env := newSQLiteEnv(t, "")
 	c := connect(t, env.deps, "kiro")
-	msg := callToolErr(t, c, "create_task", map[string]any{"project_id": "WEB", "title": "Task"})
+	msg := callToolErr(t, c, "create_task", map[string]any{"project_id": "NOPE", "title": "Task"})
 	if strings.Contains(msg, "FOREIGN KEY") || !strings.Contains(msg, "list_projects") {
 		t.Errorf("error = %q, want a not-found error pointing at list_projects", msg)
+	}
+	msg = callToolErr(t, c, "get_board", map[string]any{"project_id": "NOPE"})
+	if !strings.Contains(msg, "list_projects") {
+		t.Errorf("get_board error = %q, want a not-found error pointing at list_projects", msg)
+	}
+}
+
+// Every project_id argument accepts the project key, case-insensitively.
+func TestProjectKey_SQLite_AcceptedInPlaceOfID(t *testing.T) {
+	env := newSQLiteEnv(t, "")
+	c := connect(t, env.deps, "kiro")
+
+	upper := callTool(t, c, "create_task", map[string]any{"project_id": "WEB", "title": "Upper"})
+	lower := callTool(t, c, "create_task", map[string]any{"project_id": "web", "title": "Lower"})
+	for _, task := range []map[string]any{upper, lower} {
+		if task["ProjectID"] != env.project.ID {
+			t.Errorf("task %v project = %v, want %s", task["Title"], task["ProjectID"], env.project.ID)
+		}
+	}
+
+	board := callTool(t, c, "get_board", map[string]any{"project_id": "WEB"})
+	raw, _ := json.Marshal(board)
+	for _, task := range []map[string]any{upper, lower} {
+		if !strings.Contains(string(raw), task["ID"].(string)) {
+			t.Errorf("get_board by key is missing task %v", task["Title"])
+		}
+	}
+
+	if text := callToolText(t, c, "list_tasks", map[string]any{"project_id": "Web"}); !strings.Contains(text, upper["ID"].(string)) {
+		t.Errorf("list_tasks by key = %s, want task %v", text, upper["ID"])
+	}
+
+	callTool(t, c, "claim_task", map[string]any{"task_id": upper["ID"], "project_id": "web"})
+	done := callTool(t, c, "complete_task", map[string]any{"task_id": upper["ID"], "project_id": "web"})
+	if done["status"] != "completed" {
+		t.Errorf("complete_task by key = %v, want completed", done)
 	}
 }
