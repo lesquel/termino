@@ -132,3 +132,8 @@ func (uc *SprintUseCases) AddTaskToSprint(
 	t.SprintID = &sprintID
 	return uc.tasks.Save(ctx, t)
 }
+
+// ListSprints returns every sprint of a project.
+func (uc *SprintUseCases) ListSprints(ctx context.Context, projectID string) ([]sprintdomain.Sprint, error) {
+	return uc.sprints.ListByProject(ctx, projectID)
+}

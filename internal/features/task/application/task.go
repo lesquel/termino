@@ -396,6 +396,11 @@ func (uc *TaskUseCases) FindTaskByID(ctx context.Context, taskID string) (taskdo
 	return uc.tasks.FindByID(ctx, taskID)
 }
 
+// FindTaskByNumber retrieves a task by its per-project number (the N in TER-N).
+func (uc *TaskUseCases) FindTaskByNumber(ctx context.Context, projectID string, number int) (taskdomain.Task, error) {
+	return uc.tasks.FindByNumber(ctx, projectID, number)
+}
+
 // ListCommentsByTask returns all comments for a task.
 func (uc *TaskUseCases) ListCommentsByTask(ctx context.Context, taskID string) ([]taskdomain.Comment, error) {
 	return uc.comments.ListByTask(ctx, taskID)

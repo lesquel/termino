@@ -35,6 +35,11 @@ func init() {
 	rootCmd.AddCommand(
 		newProjectCmd(),
 		newTaskCmd(),
+		newTaskGroupCmd(),
+		newMyTasksCmd(),
+		newMemberCmd(),
+		newSprintCmd(),
+		newColumnCmd(),
 		newBoardCmd(),
 		newWidgetCmd(),
 		newMCPCmd(),
