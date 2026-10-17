@@ -12,6 +12,9 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// embeddedThemes holds the built-in themes; internal/tuikit/themes is their
+// only source of truth.
+//
 //go:embed themes/*.toml
 var embeddedThemes embed.FS
 
