@@ -39,9 +39,13 @@ func newProjectNewCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "new",
+		Use:   "new [name]",
 		Short: "Create a new project",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if name == "" && len(args) == 1 {
+				name = args[0]
+			}
 			// Prompt for missing flags when running interactively.
 			if name == "" {
 				fmt.Print("Project name: ")
