@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -163,4 +164,73 @@ func TestClaimAndComment_SQLite_ActorOverrideWins(t *testing.T) {
 	if _, err := env.members.FindByID(context.Background(), "kiro"); err == nil {
 		t.Fatal("client name registered as member although --actor overrides it")
 	}
+}
+
+// callToolErr invokes a tool expected to fail and returns its error text.
+func callToolErr(t *testing.T, c *client.Client, name string, args map[string]any) string {
+	t.Helper()
+	req := mcplib.CallToolRequest{}
+	req.Params.Name = name
+	req.Params.Arguments = args
+	res, err := c.CallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if !res.IsError {
+		t.Fatalf("%s succeeded, want a tool error", name)
+	}
+	if tc, ok := mcplib.AsTextContent(res.Content[0]); ok {
+		return tc.Text
+	}
+	return ""
+}
+
+func TestWriteTools_SQLite_StripTerminalInjection(t *testing.T) {
+	env := newSQLiteEnv(t, "")
+	c := connect(t, env.deps, "kiro")
+	ctx := context.Background()
+
+	task := callTool(t, c, "create_task", map[string]any{
+		"project_id":  env.project.ID,
+		"title":       "\x1b]0;x\x07Fix\nlogin",
+		"description": "line1\n\x1b[2Jline2\x07",
+	})
+	taskID := task["ID"].(string)
+	got, err := env.deps.TaskUC.FindTaskByID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("find task: %v", err)
+	}
+	if got.Title != "Fix login" {
+		t.Errorf("title = %q, want %q", got.Title, "Fix login")
+	}
+	if got.Description != "line1\nline2" {
+		t.Errorf("description = %q, want %q", got.Description, "line1\nline2")
+	}
+
+	callTool(t, c, "update_task", map[string]any{"task_id": taskID, "title": "\x1b]0;y\x07Renamed"})
+	callTool(t, c, "add_comment", map[string]any{"task_id": taskID, "body": "ok\x1b]0;z\x07"})
+	got, _ = env.deps.TaskUC.FindTaskByID(ctx, taskID)
+	if got.Title != "Renamed" {
+		t.Errorf("updated title = %q, want %q", got.Title, "Renamed")
+	}
+	comments, _ := env.deps.TaskUC.ListCommentsByTask(ctx, taskID)
+	if len(comments) != 1 || comments[0].Body != "ok" {
+		t.Errorf("comments = %+v, want one body %q", comments, "ok")
+	}
+}
+
+func TestWriteTools_SQLite_RejectInvalidInput(t *testing.T) {
+	env := newSQLiteEnv(t, "")
+	c := connect(t, env.deps, "kiro")
+
+	msg := callToolErr(t, c, "create_task", map[string]any{
+		"project_id": env.project.ID, "title": "Task", "priority": "banana",
+	})
+	if !strings.Contains(msg, "priority") {
+		t.Errorf("error = %q, want it to mention priority", msg)
+	}
+	callToolErr(t, c, "create_task", map[string]any{"project_id": env.project.ID, "title": "\x1b]0;x\x07 "})
+
+	task := callTool(t, c, "create_task", map[string]any{"project_id": env.project.ID, "title": "Task"})
+	callToolErr(t, c, "update_task", map[string]any{"task_id": task["ID"], "priority": "urgent"})
 }

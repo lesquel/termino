@@ -10,6 +10,7 @@ import (
 	"github.com/lesquel/termino/internal/tuikit"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 // TaskCreatedMsg is sent when a new task has been successfully created.
@@ -74,7 +75,7 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			return m, cancelForm()
 		case "enter":
-			title := m.titleInput.Value()
+			title := sanitize.Line(m.titleInput.Value())
 			if title == "" {
 				m.err = "Title is required"
 				return m, nil
@@ -89,7 +90,7 @@ func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m FormModel) submitForm() tea.Cmd {
-	title := m.titleInput.Value()
+	title := sanitize.Line(m.titleInput.Value())
 	actor := m.actor
 	uc := m.uc
 	input := taskapp.CreateTaskInput{

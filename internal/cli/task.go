@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	sharedomain "github.com/lesquel/termino/internal/domain"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +26,10 @@ func newTaskCmd() *cobra.Command {
 		Short: "Add a new task to the current project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			title := args[0]
+			title, desc, prio, err := normalizeTaskInput(args[0], description, priority)
+			if err != nil {
+				return err
+			}
 
 			cfg, err := globalContainer.Config()
 			if err != nil {
@@ -40,11 +45,6 @@ func newTaskCmd() *cobra.Command {
 				return err
 			}
 
-			prio := taskdomain.Priority(priority)
-			if prio == "" {
-				prio = taskdomain.PriorityMedium
-			}
-
 			uc, err := globalContainer.TaskUseCases()
 			if err != nil {
 				return err
@@ -54,7 +54,7 @@ func newTaskCmd() *cobra.Command {
 			t, err := uc.CreateTask(context.Background(), actor, taskapp.CreateTaskInput{
 				ProjectID:   cfg.CurrentProjectID,
 				Title:       title,
-				Description: description,
+				Description: desc,
 				ColumnID:    colID,
 				Priority:    prio,
 			})
@@ -79,7 +79,7 @@ func newTaskCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Created task %s-%d: %s\n", key, t.Number, t.Title)
+			fmt.Printf("Created task %s-%d: %s\n", key, t.Number, sanitize.Line(t.Title))
 			return nil
 		},
 	}
@@ -88,6 +88,23 @@ func newTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "medium", "Priority: low, medium, high, critical")
 	cmd.Flags().StringVar(&columnFlag, "column", "", "Column ID or name (defaults to first column)")
 	return cmd
+}
+
+// normalizeTaskInput sanitizes user-supplied task text at the CLI edge and
+// validates the priority against the closed enum (empty means medium).
+func normalizeTaskInput(rawTitle, rawDesc, rawPriority string) (string, string, taskdomain.Priority, error) {
+	title := sanitize.Line(rawTitle)
+	if title == "" {
+		return "", "", "", fmt.Errorf("title is empty after removing control characters")
+	}
+	prio := taskdomain.PriorityMedium
+	if p := strings.ToLower(strings.TrimSpace(rawPriority)); p != "" {
+		prio = taskdomain.Priority(p)
+		if !prio.Valid() {
+			return "", "", "", fmt.Errorf("invalid priority %q (use low, medium, high or critical)", rawPriority)
+		}
+	}
+	return title, sanitize.Clean(rawDesc), prio, nil
 }
 
 // resolveColumn returns the column ID to use for a new task.

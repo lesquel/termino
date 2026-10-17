@@ -14,6 +14,7 @@ import (
 	boarddomain "github.com/lesquel/termino/internal/features/board/domain"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 	"github.com/lesquel/termino/internal/tuikit"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 const (
@@ -277,7 +278,7 @@ func (m BoardModel) renderColumn(col boarddomain.Column, colIdx int, width int) 
 		Foreground(headerFg).
 		Bold(selected).
 		Width(width - 2).
-		Render(col.Name + wipLabel)
+		Render(sanitize.Line(col.Name) + wipLabel)
 
 	taskLines := make([]string, 0, len(taskIDs))
 	for taskIdx, taskID := range taskIDs {
@@ -310,7 +311,7 @@ func (m BoardModel) renderTaskLine(taskID string, colIdx, taskIdx, width int) st
 	if colID != "" {
 		if fullTasks, ok := m.tasks[colID]; ok && taskIdx < len(fullTasks) {
 			t := fullTasks[taskIdx]
-			label = fmt.Sprintf("%-8s %s", fmt.Sprintf("#%d", t.Number), t.Title)
+			label = fmt.Sprintf("%-8s %s", fmt.Sprintf("#%d", t.Number), sanitize.Line(t.Title))
 		}
 	}
 

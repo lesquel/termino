@@ -23,6 +23,7 @@ import (
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 // Deps holds the application dependencies for the MCP server.
@@ -121,6 +122,30 @@ func textResult(v any) (*mcplib.CallToolResult, error) {
 
 func errResult(err error) (*mcplib.CallToolResult, error) {
 	return mcplib.NewToolResultError(err.Error()), nil
+}
+
+// parsePriority validates an agent-supplied priority against the closed enum,
+// returning def when raw is empty.
+func parsePriority(raw string, def taskdomain.Priority) (taskdomain.Priority, error) {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return def, nil
+	}
+	p := taskdomain.Priority(raw)
+	if !p.Valid() {
+		return "", fmt.Errorf("invalid priority %q (use low, medium, high or critical)", raw)
+	}
+	return p, nil
+}
+
+// cleanTitle sanitizes a single-line title and rejects one that is empty
+// once escape sequences and control characters are removed.
+func cleanTitle(raw string) (string, error) {
+	title := sanitize.Line(raw)
+	if title == "" {
+		return "", fmt.Errorf("title is empty after removing control characters")
+	}
+	return title, nil
 }
 
 func updatePresence(ctx context.Context, deps Deps, actor sharedomain.Actor) {
@@ -282,7 +307,7 @@ func makeListTasksHandler(deps Deps) server.ToolHandlerFunc {
 			ProjectID:  req.GetString("project_id", ""),
 			AssigneeID: req.GetString("assignee_id", ""),
 			ColumnID:   req.GetString("column_id", ""),
-			SearchText: req.GetString("search_text", ""),
+			SearchText: sanitize.Line(req.GetString("search_text", "")),
 		}
 		if labelsRaw := req.GetString("label_ids", ""); labelsRaw != "" {
 			filter.LabelIDs = strings.Split(labelsRaw, ",")
@@ -344,11 +369,17 @@ func makeCreateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		if err != nil {
 			return errResult(err)
 		}
-		priority := taskdomain.Priority(req.GetString("priority", "medium"))
+		if title, err = cleanTitle(title); err != nil {
+			return errResult(err)
+		}
+		priority, err := parsePriority(req.GetString("priority", ""), taskdomain.PriorityMedium)
+		if err != nil {
+			return errResult(err)
+		}
 		input := taskapp.CreateTaskInput{
 			ProjectID:   projectID,
 			Title:       title,
-			Description: req.GetString("description", ""),
+			Description: sanitize.Clean(req.GetString("description", "")),
 			ColumnID:    req.GetString("column_id", ""),
 			Priority:    priority,
 		}
@@ -376,13 +407,21 @@ func makeUpdateTaskHandler(deps Deps) server.ToolHandlerFunc {
 		}
 		input := taskapp.UpdateTaskInput{TaskID: taskID}
 		if v := req.GetString("title", ""); v != "" {
-			input.Title = &v
+			title, err := cleanTitle(v)
+			if err != nil {
+				return errResult(err)
+			}
+			input.Title = &title
 		}
 		if v := req.GetString("description", ""); v != "" {
-			input.Description = &v
+			desc := sanitize.Clean(v)
+			input.Description = &desc
 		}
 		if v := req.GetString("priority", ""); v != "" {
-			p := taskdomain.Priority(v)
+			p, err := parsePriority(v, "")
+			if err != nil {
+				return errResult(err)
+			}
 			input.Priority = &p
 		}
 		if err := deps.TaskUC.UpdateTask(ctx, actor, input); err != nil {
@@ -525,6 +564,10 @@ func makeAddCommentHandler(deps Deps) server.ToolHandlerFunc {
 		actor, err := resolveActor(ctx, deps)
 		if err != nil {
 			return errResult(err)
+		}
+		body = strings.TrimSpace(sanitize.Clean(body))
+		if body == "" {
+			return errResult(fmt.Errorf("comment body is empty after removing control characters"))
 		}
 		comment, err := deps.TaskUC.AddComment(ctx, actor, taskID, body)
 		if err != nil {

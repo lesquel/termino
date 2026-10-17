@@ -80,3 +80,28 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func TestDetailModel_StripsTerminalInjectionFromTaskText(t *testing.T) {
+	model := tasktui.NewDetailModel("task-1", nil, taskapp.Actor{ID: "cli", Name: "cli"}, buildTaskTestTheme(), tuikit.DefaultKeyMap())
+	task := taskdomain.Task{
+		ID:          "task-1",
+		Number:      7,
+		Title:       "\x1b]0;pwned\x07Deploy",
+		Description: "step\x1b]52;c;ZXZpbA==\x07 one",
+	}
+	updated, _ := model.Update(tasktui.TaskLoadedMsg{
+		Task:     task,
+		Comments: []taskdomain.Comment{{AuthorID: "kiro", Body: "done\x1b]0;x\x07"}},
+	})
+	updated, _ = updated.(tea.Model).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	view := updated.(tasktui.DetailModel).View()
+	for _, bad := range []string{"\x1b]", "\x07", "pwned", "ZXZpbA=="} {
+		if strings.Contains(view, bad) {
+			t.Errorf("view contains %q: %q", bad, view)
+		}
+	}
+	if !strings.Contains(view, "Deploy") || !strings.Contains(view, "step one") {
+		t.Errorf("sanitized text missing from view: %q", view)
+	}
+}

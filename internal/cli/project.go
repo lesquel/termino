@@ -12,6 +12,7 @@ import (
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	"github.com/lesquel/termino/internal/platform/config"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +51,10 @@ func newProjectNewCmd() *cobra.Command {
 			if key == "" {
 				fmt.Print("Project key (2-5 uppercase letters): ")
 				fmt.Scanln(&key) //nolint:errcheck
+			}
+			name = sanitize.Line(name)
+			if name == "" {
+				return fmt.Errorf("project name is required")
 			}
 			key = strings.ToUpper(strings.TrimSpace(key))
 			if !keyRegexp.MatchString(key) {
@@ -144,7 +149,7 @@ func newProjectListCmd() *cobra.Command {
 				return nil
 			}
 			for _, p := range projects {
-				fmt.Printf("  %s\t%s\t(%s)\n", p.Key, p.Name, p.Methodology)
+				fmt.Printf("  %s\t%s\t(%s)\n", p.Key, sanitize.Line(p.Name), p.Methodology)
 			}
 			return nil
 		},

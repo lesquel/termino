@@ -12,6 +12,7 @@ import (
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/lesquel/termino/internal/tuikit"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 // projectItem wraps a domain Project for the bubbles/list component.
@@ -19,7 +20,7 @@ type projectItem struct {
 	project projectdomain.Project
 }
 
-func (i projectItem) Title() string       { return i.project.Name }
+func (i projectItem) Title() string       { return sanitize.Line(i.project.Name) }
 func (i projectItem) Description() string { return i.project.Key }
 func (i projectItem) FilterValue() string { return i.project.Name + " " + i.project.Key }
 

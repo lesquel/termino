@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 const (
@@ -130,7 +131,7 @@ func (m ActivityModel) renderEntry(e taskdomain.Activity) string {
 	actionStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
 	timeStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 
-	actor := e.ActorID
+	actor := sanitize.Line(e.ActorID)
 	if len(actor) > 10 {
 		actor = actor[:10]
 	}

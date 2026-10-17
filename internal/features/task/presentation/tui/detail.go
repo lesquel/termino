@@ -14,6 +14,7 @@ import (
 	"github.com/lesquel/termino/internal/tuikit"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
+	"github.com/lesquel/termino/internal/platform/sanitize"
 )
 
 // TaskLoadedMsg carries the full task data loaded asynchronously.
@@ -118,8 +119,8 @@ func (m DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.comments = msg.Comments
 		m.activity = msg.Activity
 		m.ready = true
-		m.titleInput.SetValue(m.task.Title)
-		m.descTextarea.SetValue(m.task.Description)
+		m.titleInput.SetValue(sanitize.Line(m.task.Title))
+		m.descTextarea.SetValue(sanitize.Clean(m.task.Description))
 
 	case tea.KeyMsg:
 		if m.editing {
@@ -186,8 +187,11 @@ func (m DetailModel) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m DetailModel) saveEdit() tea.Cmd {
-	title := m.titleInput.Value()
-	desc := m.descTextarea.Value()
+	title := sanitize.Line(m.titleInput.Value())
+	desc := sanitize.Clean(m.descTextarea.Value())
+	if title == "" {
+		title = sanitize.Line(m.task.Title) // never blank a title through an edit
+	}
 	actor := m.actor
 	uc := m.uc
 	taskID := m.task.ID
@@ -232,26 +236,26 @@ func (m DetailModel) detailView() string {
 
 	ref := fmt.Sprintf("#%d", t.Number)
 	lines := []string{
-		titleStyle.Render(ref + " " + t.Title),
+		titleStyle.Render(ref + " " + sanitize.Line(t.Title)),
 		"",
 		labelStyle.Render("Priority:") + valueStyle.Render(string(t.Priority)),
 		labelStyle.Render("Column:") + valueStyle.Render(t.ColumnID),
 	}
 	if t.AssigneeID != nil {
-		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(*t.AssigneeID))
+		lines = append(lines, labelStyle.Render("Assignee:")+valueStyle.Render(sanitize.Line(*t.AssigneeID)))
 	}
 	if t.DueDate != nil {
 		lines = append(lines, labelStyle.Render("Due:")+valueStyle.Render(t.DueDate.Format("2006-01-02")))
 	}
 	if t.Description != "" {
-		lines = append(lines, "", sectionStyle.Render("Description"), t.Description)
+		lines = append(lines, "", sectionStyle.Render("Description"), sanitize.Clean(t.Description))
 	}
 
 	// Comments.
 	if len(m.comments) > 0 {
 		lines = append(lines, "", sectionStyle.Render("Comments"))
 		for _, c := range m.comments {
-			lines = append(lines, fmt.Sprintf("  %s  %s", c.AuthorID, c.Body))
+			lines = append(lines, fmt.Sprintf("  %s  %s", sanitize.Line(c.AuthorID), sanitize.Line(c.Body)))
 		}
 	}
 
@@ -260,7 +264,7 @@ func (m DetailModel) detailView() string {
 		lines = append(lines, "", sectionStyle.Render("Activity"))
 		for _, a := range m.activity {
 			lines = append(lines, fmt.Sprintf("  %s  %s  %s",
-				a.ActorID, a.Action, timeAgo(a.CreatedAt)))
+				sanitize.Line(a.ActorID), a.Action, timeAgo(a.CreatedAt)))
 		}
 	}
 
