@@ -25,9 +25,37 @@ func NewTaskRepository(db *sql.DB) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
-// Save inserts or updates a Task row.
+// Save inserts or updates a Task row, stamping created_at (on insert) and
+// updated_at with the current time. It returns taskdomain.ErrDuplicateNumber
+// when another task of the project already holds t.Number.
 func (r *TaskRepository) Save(ctx context.Context, t taskdomain.Task) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC()
+	t.CreatedAt, t.UpdatedAt = now, now
+	return r.upsert(ctx, t, false)
+}
+
+// SaveImported inserts or updates a Task row keeping the given CreatedAt,
+// UpdatedAt, UpdatedBy and Number, so a task read from a shared file is stored
+// exactly as exported. Used by repository-sharing import only.
+func (r *TaskRepository) SaveImported(ctx context.Context, t taskdomain.Task) error {
+	return r.upsert(ctx, t, true)
+}
+
+// Renumber changes the project-scoped number of a task without touching its
+// timestamps, so every machine renumbering the same task converges on the
+// same exported content.
+func (r *TaskRepository) Renumber(ctx context.Context, id string, number int) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET number = ? WHERE id = ?`, number, id)
+	if err != nil {
+		return fmt.Errorf("task.Renumber: %w", mapUniqueNumber(err))
+	}
+	return nil
+}
+
+// upsert writes t. With keep false only updated_at is refreshed on conflict
+// (created_at and number stay as first stored); with keep true every given
+// value, including created_at and number, overwrites the stored row.
+func (r *TaskRepository) upsert(ctx context.Context, t taskdomain.Task, keep bool) error {
 	var deletedAt *string
 	if t.DeletedAt != nil {
 		s := t.DeletedAt.UTC().Format(time.RFC3339)
@@ -63,13 +91,19 @@ func (r *TaskRepository) Save(ctx context.Context, t taskdomain.Task) error {
 		sourceRef = *t.SourceRef
 	}
 
+	keepSet := ""
+	if keep {
+		keepSet = `
+			number      = excluded.number,
+			created_at  = excluded.created_at,`
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO tasks
 			(id, project_id, number, title, description, column_id, sprint_id,
 			 priority, assignee_id, due_date, points, position, deleted_at,
-			 source, source_path, source_ref, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
+			 source, source_path, source_ref, created_at, updated_at, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET`+keepSet+`
 			title       = excluded.title,
 			description = excluded.description,
 			column_id   = excluded.column_id,
@@ -83,14 +117,16 @@ func (r *TaskRepository) Save(ctx context.Context, t taskdomain.Task) error {
 			source      = excluded.source,
 			source_path = excluded.source_path,
 			source_ref  = excluded.source_ref,
-			updated_at  = excluded.updated_at`,
+			updated_at  = excluded.updated_at,
+			updated_by  = excluded.updated_by`,
 		t.ID, t.ProjectID, t.Number, t.Title, t.Description,
 		t.ColumnID, sprintID, string(t.Priority), assigneeID,
 		dueDate, points, t.Position, deletedAt,
-		source, sourcePath, sourceRef, now, now,
+		source, sourcePath, sourceRef,
+		t.CreatedAt.UTC().Format(time.RFC3339), t.UpdatedAt.UTC().Format(time.RFC3339), t.UpdatedBy,
 	)
 	if err != nil {
-		return fmt.Errorf("task.Save: %w", err)
+		return fmt.Errorf("task.Save: %w", mapUniqueNumber(err))
 	}
 	return nil
 }
@@ -98,9 +134,7 @@ func (r *TaskRepository) Save(ctx context.Context, t taskdomain.Task) error {
 // FindByID retrieves a Task by its UUID (including soft-deleted).
 func (r *TaskRepository) FindByID(ctx context.Context, id string) (taskdomain.Task, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, project_id, number, title, description, column_id, sprint_id,
-		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref, `+labelsColumn+`
+		SELECT `+taskColumns+`
 		FROM   tasks
 		WHERE  id = ?`, id)
 	return scanTask(row)
@@ -109,9 +143,7 @@ func (r *TaskRepository) FindByID(ctx context.Context, id string) (taskdomain.Ta
 // FindByNumber retrieves a non-deleted Task by its project-scoped number.
 func (r *TaskRepository) FindByNumber(ctx context.Context, projectID string, number int) (taskdomain.Task, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, project_id, number, title, description, column_id, sprint_id,
-		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref, `+labelsColumn+`
+		SELECT `+taskColumns+`
 		FROM   tasks
 		WHERE  project_id = ? AND number = ? AND deleted_at IS NULL`, projectID, number)
 	return scanTask(row)
@@ -155,9 +187,7 @@ func (r *TaskRepository) List(ctx context.Context, filter taskdomain.TaskFilter)
 	}
 
 	query := `
-		SELECT id, project_id, number, title, description, column_id, sprint_id,
-		       priority, assignee_id, due_date, points, position, deleted_at,
-		       source, source_path, source_ref, ` + labelsColumn + `
+		SELECT ` + taskColumns + `
 		FROM   tasks`
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -199,7 +229,21 @@ func (r *TaskRepository) NextNumber(ctx context.Context, projectID string) (int,
 	return max + 1, nil
 }
 
-// scanTask scans a single task row from a *sql.Row.
+// mapUniqueNumber turns the UNIQUE(project_id, number) violation into
+// taskdomain.ErrDuplicateNumber so callers can retry with another number.
+func mapUniqueNumber(err error) error {
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: tasks.project_id, tasks.number") {
+		return fmt.Errorf("%w: %v", taskdomain.ErrDuplicateNumber, err)
+	}
+	return err
+}
+
+// taskColumns is the select list shared by every task query; scanTaskRow
+// reads it back in the same order.
+const taskColumns = `id, project_id, number, title, description, column_id, sprint_id,
+		       priority, assignee_id, due_date, points, position, deleted_at,
+		       source, source_path, source_ref, created_at, updated_at, updated_by, ` + labelsColumn
+
 // labelSeparator joins label names in the labels projection; the ASCII unit
 // separator cannot appear in a sanitized label name.
 const labelSeparator = "\x1f"
@@ -219,24 +263,52 @@ func splitLabels(joined string) []string {
 	return names
 }
 
+// rowScanner is satisfied by both *sql.Row and *sql.Rows.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanTask scans a single task row from a *sql.Row.
 func scanTask(row *sql.Row) (taskdomain.Task, error) {
+	t, err := scanTaskRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return taskdomain.Task{}, taskdomain.ErrTaskNotFound
+	}
+	return t, err
+}
+
+// collectTasks reads all task rows from *sql.Rows.
+func collectTasks(rows *sql.Rows) ([]taskdomain.Task, error) {
+	var tasks []taskdomain.Task
+	for rows.Next() {
+		t, err := scanTaskRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
+}
+
+// scanTaskRow reads one row selected with taskColumns.
+func scanTaskRow(row rowScanner) (taskdomain.Task, error) {
 	var t taskdomain.Task
 	var deletedAt, dueDate *string
 	var sprintID, assigneeID *string
 	var points int
 	var source, sourcePath, sourceRef, labels string
-	var priority string
+	var priority, createdAt, updatedAt string
 
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description,
 		&t.ColumnID, &sprintID, &priority, &assigneeID,
 		&dueDate, &points, &t.Position, &deletedAt,
-		&source, &sourcePath, &sourceRef, &labels,
+		&source, &sourcePath, &sourceRef, &createdAt, &updatedAt, &t.UpdatedBy, &labels,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return taskdomain.Task{}, err
+	}
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return taskdomain.Task{}, taskdomain.ErrTaskNotFound
-		}
 		return taskdomain.Task{}, fmt.Errorf("task scan: %w", err)
 	}
 
@@ -256,6 +328,9 @@ func scanTask(row *sql.Row) (taskdomain.Task, error) {
 	if sourceRef != "" {
 		t.SourceRef = &sourceRef
 	}
+	// A timestamp in another layout reads as zero rather than hiding the task.
+	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+	t.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	if dueDate != nil {
 		dd, err := time.Parse(time.RFC3339, *dueDate)
 		if err != nil {
@@ -271,60 +346,6 @@ func scanTask(row *sql.Row) (taskdomain.Task, error) {
 		t.DeletedAt = &da
 	}
 	return t, nil
-}
-
-// collectTasks reads all task rows from *sql.Rows.
-func collectTasks(rows *sql.Rows) ([]taskdomain.Task, error) {
-	var tasks []taskdomain.Task
-	for rows.Next() {
-		var t taskdomain.Task
-		var deletedAt, dueDate *string
-		var sprintID, assigneeID *string
-		var points int
-		var source, sourcePath, sourceRef, labels string
-		var priority string
-
-		if err := rows.Scan(
-			&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description,
-			&t.ColumnID, &sprintID, &priority, &assigneeID,
-			&dueDate, &points, &t.Position, &deletedAt,
-			&source, &sourcePath, &sourceRef, &labels,
-		); err != nil {
-			return nil, fmt.Errorf("task row scan: %w", err)
-		}
-		t.Priority = taskdomain.Priority(priority)
-		t.Labels = splitLabels(labels)
-		t.SprintID = sprintID
-		t.AssigneeID = assigneeID
-		if points > 0 {
-			t.Points = &points
-		}
-		if source != "" {
-			t.Source = &source
-		}
-		if sourcePath != "" {
-			t.SourcePath = &sourcePath
-		}
-		if sourceRef != "" {
-			t.SourceRef = &sourceRef
-		}
-		if dueDate != nil {
-			dd, err := time.Parse(time.RFC3339, *dueDate)
-			if err != nil {
-				return nil, fmt.Errorf("task parse due_date: %w", err)
-			}
-			t.DueDate = &dd
-		}
-		if deletedAt != nil {
-			da, err := time.Parse(time.RFC3339, *deletedAt)
-			if err != nil {
-				return nil, fmt.Errorf("task parse deleted_at: %w", err)
-			}
-			t.DeletedAt = &da
-		}
-		tasks = append(tasks, t)
-	}
-	return tasks, rows.Err()
 }
 
 // CommentRepository is the SQLite-backed implementation of taskdomain.CommentRepository.

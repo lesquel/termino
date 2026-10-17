@@ -66,6 +66,7 @@ type Project struct {
 	Name           string
 	Methodology    MethodologyKind
 	AssociatedPath string // filesystem path the widget uses to auto-detect this project (CWD); "" when unset
+	ShareRoot      string // git root whose .termino/ directory mirrors this project; "" when not shared
 	CreatedAt      time.Time
 	ArchivedAt     *time.Time
 }

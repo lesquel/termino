@@ -112,6 +112,7 @@ func (uc *SprintUseCases) CloseSprint(
 			// simply detach — the infrastructure layer handles re-assignment.
 			t.SprintID = nil
 		}
+		t.UpdatedBy = actor.Name
 		if err := uc.tasks.Save(ctx, t); err != nil {
 			return fmt.Errorf("update task %s: %w", t.ID, err)
 		}
@@ -130,6 +131,7 @@ func (uc *SprintUseCases) AddTaskToSprint(
 		return fmt.Errorf("find task: %w", err)
 	}
 	t.SprintID = &sprintID
+	t.UpdatedBy = actor.Name
 	return uc.tasks.Save(ctx, t)
 }
 

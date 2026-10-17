@@ -158,6 +158,10 @@ func (uc *TaskUseCases) AddLabels(ctx context.Context, actor Actor, taskID strin
 	return uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "labeled", map[string]any{"labels": attached})
 }
 
+// maxNumberAttempts bounds how many following numbers CreateTask tries when
+// the allocated one is already taken.
+const maxNumberAttempts = 20
+
 // CreateTask assigns the next number, sets the fractional position at the end
 // of the target column, saves the task, and records a 'created' activity.
 func (uc *TaskUseCases) CreateTask(
@@ -210,8 +214,19 @@ func (uc *TaskUseCases) CreateTask(
 	if t.Priority == "" {
 		t.Priority = taskdomain.PriorityMedium
 	}
-	if err := uc.tasks.Save(ctx, t); err != nil {
-		return taskdomain.Task{}, fmt.Errorf("save task: %w", err)
+	t.UpdatedBy = actor.Name
+	// Another process (or an imported shared file) may take the number between
+	// NextNumber and Save; UNIQUE(project_id, number) rejects it, so try the
+	// following numbers.
+	for attempt := 0; ; attempt++ {
+		err = uc.tasks.Save(ctx, t)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, taskdomain.ErrDuplicateNumber) || attempt >= maxNumberAttempts {
+			return taskdomain.Task{}, fmt.Errorf("save task: %w", err)
+		}
+		t.Number++
 	}
 	if err := uc.appendActivity(ctx, actor, t.ID, t.ProjectID, "created", map[string]any{
 		"title": t.Title,
@@ -255,6 +270,7 @@ func (uc *TaskUseCases) UpdateTask(
 	if len(changed) == 0 {
 		return nil
 	}
+	t.UpdatedBy = actor.Name
 	if err := uc.tasks.Save(ctx, t); err != nil {
 		return fmt.Errorf("save task: %w", err)
 	}
@@ -301,6 +317,7 @@ func (uc *TaskUseCases) MoveTask(
 	fromColumnID := t.ColumnID
 	t.ColumnID = targetColumnID
 	t.Position = position
+	t.UpdatedBy = actor.Name
 	if err := uc.tasks.Save(ctx, t); err != nil {
 		return fmt.Errorf("save task: %w", err)
 	}
@@ -352,6 +369,7 @@ func (uc *TaskUseCases) AssignTask(
 		return fmt.Errorf("find task: %w", err)
 	}
 	t.AssigneeID = assigneeID
+	t.UpdatedBy = actor.Name
 	if err := uc.tasks.Save(ctx, t); err != nil {
 		return fmt.Errorf("save task: %w", err)
 	}

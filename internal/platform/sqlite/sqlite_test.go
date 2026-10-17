@@ -110,3 +110,24 @@ func TestOpen_FilePermissions(t *testing.T) {
 		t.Errorf("db file perm = %04o; want 0600", perm)
 	}
 }
+
+func TestOpen_ShareMigration(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	defer db.Close()
+
+	for _, q := range []string{
+		`SELECT share_root FROM projects`,
+		`SELECT updated_by FROM tasks`,
+		`SELECT project_id, path, hash FROM share_files`,
+	} {
+		rows, err := db.Query(q)
+		if err != nil {
+			t.Errorf("%s: %v", q, err)
+			continue
+		}
+		_ = rows.Close()
+	}
+}

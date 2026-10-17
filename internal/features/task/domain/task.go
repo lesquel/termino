@@ -50,6 +50,9 @@ type Task struct {
 	SourcePath  *string  // filesystem path of the source file
 	SourceRef   *string  // unique reference within the source file
 	Labels      []string // label names, read-only projection of task_labels
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	UpdatedBy   string // name of the member who made the last change; "" when unknown
 }
 
 // Label is a coloured tag that can be applied to multiple tasks.
@@ -107,6 +110,10 @@ type TaskRepository interface {
 	// NextNumber returns the next available task number for the project.
 	NextNumber(ctx context.Context, projectID string) (int, error)
 }
+
+// ErrDuplicateNumber is returned by TaskRepository.Save when another task of
+// the project already holds the number (UNIQUE(project_id, number)).
+var ErrDuplicateNumber = errors.New("task number already taken")
 
 // CommentRepository defines persistence for task comments.
 type CommentRepository interface {

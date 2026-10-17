@@ -35,14 +35,15 @@ func (r *ProjectRepository) Save(ctx context.Context, p projectdomain.Project) e
 		associatedPath = &p.AssociatedPath
 	}
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO projects (id, key, name, methodology, created_at, archived_at, associated_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO projects (id, key, name, methodology, created_at, archived_at, associated_path, share_root)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			key             = excluded.key,
 			name            = excluded.name,
 			methodology     = excluded.methodology,
 			archived_at     = excluded.archived_at,
-			associated_path = excluded.associated_path`,
+			associated_path = excluded.associated_path,
+			share_root      = excluded.share_root`,
 		p.ID,
 		p.Key,
 		p.Name,
@@ -50,6 +51,7 @@ func (r *ProjectRepository) Save(ctx context.Context, p projectdomain.Project) e
 		p.CreatedAt.UTC().Format(time.RFC3339),
 		archivedAt,
 		associatedPath,
+		p.ShareRoot,
 	)
 	if err != nil {
 		return fmt.Errorf("project.Save: %w", err)
@@ -60,7 +62,7 @@ func (r *ProjectRepository) Save(ctx context.Context, p projectdomain.Project) e
 // FindByID retrieves a non-archived project by its UUID.
 func (r *ProjectRepository) FindByID(ctx context.Context, id string) (projectdomain.Project, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, key, name, methodology, created_at, archived_at, associated_path
+		SELECT id, key, name, methodology, created_at, archived_at, associated_path, share_root
 		FROM   projects
 		WHERE  id = ? AND archived_at IS NULL`, id)
 	return scanProject(row)
@@ -69,7 +71,7 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (projectdom
 // FindByKey retrieves a non-archived project by its short key.
 func (r *ProjectRepository) FindByKey(ctx context.Context, key string) (projectdomain.Project, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, key, name, methodology, created_at, archived_at, associated_path
+		SELECT id, key, name, methodology, created_at, archived_at, associated_path, share_root
 		FROM   projects
 		WHERE  key = ? AND archived_at IS NULL`, key)
 	return scanProject(row)
@@ -78,7 +80,7 @@ func (r *ProjectRepository) FindByKey(ctx context.Context, key string) (projectd
 // List returns all non-archived projects ordered by created_at ascending.
 func (r *ProjectRepository) List(ctx context.Context) ([]projectdomain.Project, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, key, name, methodology, created_at, archived_at, associated_path
+		SELECT id, key, name, methodology, created_at, archived_at, associated_path, share_root
 		FROM   projects
 		WHERE  archived_at IS NULL
 		ORDER  BY created_at ASC`)
@@ -106,7 +108,7 @@ func scanProject(row *sql.Row) (projectdomain.Project, error) {
 	var createdAt string
 	var archivedAt *string
 	var associatedPath sql.NullString
-	err := row.Scan(&p.ID, &p.Key, &p.Name, &p.Methodology, &createdAt, &archivedAt, &associatedPath)
+	err := row.Scan(&p.ID, &p.Key, &p.Name, &p.Methodology, &createdAt, &archivedAt, &associatedPath, &p.ShareRoot)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return projectdomain.Project{}, fmt.Errorf("project not found")
@@ -136,7 +138,7 @@ func collectProjects(rows *sql.Rows) ([]projectdomain.Project, error) {
 		var createdAt string
 		var archivedAt *string
 		var associatedPath sql.NullString
-		if err := rows.Scan(&p.ID, &p.Key, &p.Name, &p.Methodology, &createdAt, &archivedAt, &associatedPath); err != nil {
+		if err := rows.Scan(&p.ID, &p.Key, &p.Name, &p.Methodology, &createdAt, &archivedAt, &associatedPath, &p.ShareRoot); err != nil {
 			return nil, fmt.Errorf("project row scan: %w", err)
 		}
 		var err error
