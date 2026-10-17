@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"context"
+
 	apptui "github.com/lesquel/termino/internal/app/tui"
+	sharedomain "github.com/lesquel/termino/internal/domain"
 	"github.com/lesquel/termino/internal/platform/config"
 	"github.com/spf13/cobra"
 )
@@ -54,17 +57,53 @@ func startTUI() error {
 		theme = nil
 	}
 
-	deps := apptui.RootDeps{
-		Config:    cfg,
-		DB:        db,
-		ProjectUC: projectUC,
-		BoardUC:   boardUC,
-		TaskUC:    taskUC,
-		AgentUC:   agentUC,
-		MemberUC:  memberUC,
-		Theme:     theme,
+	// Two-way task-source sync: watch the files this project imported and
+	// check a card's box when the board moves it to Done. Logs go to file.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sources := taskSources()
+	actor := sharedomain.Actor{ID: "cli", Name: cfg.UserName, Kind: "human"}
+	syncSvc, err := newSyncService()
+	if err != nil {
+		return err
 	}
-	return apptui.Start(deps)
+	logger := fileLogger()
+	watchDone := closedChan()
+	if cfg.CurrentProjectID != "" {
+		if done, werr := syncSvc.WatchImported(ctx, actor, cfg.CurrentProjectID, sources); werr != nil {
+			logger.Warn("tui: task-source watcher not started", "err", werr)
+		} else {
+			watchDone = done
+		}
+	}
+	onDone := func(taskID string) {
+		if err := syncSvc.ExportTask(ctx, taskID, sources); err != nil {
+			logger.Warn("tui: export to task source failed", "task", taskID, "err", err)
+		}
+	}
+
+	deps := apptui.RootDeps{
+		Config:     cfg,
+		DB:         db,
+		ProjectUC:  projectUC,
+		BoardUC:    boardUC,
+		TaskUC:     taskUC,
+		AgentUC:    agentUC,
+		MemberUC:   memberUC,
+		Theme:      theme,
+		OnTaskDone: onDone,
+	}
+	runErr := apptui.Start(deps)
+	cancel()
+	<-watchDone
+	return runErr
+}
+
+// closedChan returns an already-closed channel.
+func closedChan() <-chan struct{} {
+	c := make(chan struct{})
+	close(c)
+	return c
 }
 
 // currentProjectName returns the current project name, or empty string.
