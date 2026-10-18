@@ -28,7 +28,7 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 72px;
-  --section-pad: clamp(56px, 7vw, 96px);
+  --section-pad: clamp(48px, 5vw, 72px);
   --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
@@ -357,7 +357,25 @@ ul, ol { margin: 0; padding: 0; }
   line-height: 1.6;
   color: var(--text);
 }
-.snip--sm { padding: 8px 12px; }
+.snip--sm { padding: 8px 12px; font-size: 0.78rem; }
+
+/* Single-line command scrollers: keep the track invisible until hover/focus so
+   truncated lines don't show an empty bar. Space is reserved, so nothing shifts. */
+.cmd__pre, .snip { scrollbar-color: transparent transparent; }
+/* Right-edge fade hints at more text; the matching end padding lets the last
+   characters scroll fully clear of the fade. */
+.cmd__pre {
+  padding-right: 20px;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent);
+}
+/* The mask would clip an outline on the scroller itself, so show focus on the row. */
+.cmd__pre:focus-visible { outline: none; }
+.cmd:has(.cmd__pre:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cmd__pre::-webkit-scrollbar-thumb, .snip::-webkit-scrollbar-thumb { background: transparent; }
+.cmd:hover .cmd__pre, .cmd__pre:focus-visible, .snip:hover, .snip:focus-visible { scrollbar-color: var(--line-strong) transparent; }
+.cmd:hover .cmd__pre::-webkit-scrollbar-thumb, .cmd__pre:focus-visible::-webkit-scrollbar-thumb,
+.snip:hover::-webkit-scrollbar-thumb, .snip:focus-visible::-webkit-scrollbar-thumb { background: var(--line-strong); }
 
 /* ---------- Sections ---------- */
 .section { padding-block: var(--section-pad); position: relative; }
@@ -860,10 +878,13 @@ td { color: var(--muted); white-space: nowrap; }
 td.num { color: var(--ok); font-family: var(--mono); font-weight: 600; }
 .vars td { white-space: normal; }
 .vars tbody th { min-width: 0; }
+.vars tbody th code, .vars td:nth-child(2) code { overflow-wrap: normal; white-space: nowrap; }
+.vars td:last-child { min-width: 9em; }
 .footnote { margin-top: var(--space-4); color: var(--muted); font-size: 0.875rem; }
 
 /* ---------- Install tabs ---------- */
-.tabs { display: grid; gap: var(--space-5); }
+/* minmax(0, 1fr): long `white-space: pre` commands and nowrap tables must not widen the track. */
+.tabs { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); min-width: 0; }
 .tabs__list {
   display: flex;
   gap: 4px;
@@ -895,6 +916,7 @@ td.num { color: var(--ok); font-family: var(--mono); font-weight: 600; }
 }
 .tabs__panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   padding: var(--space-5);
   border: 1px solid var(--line);
@@ -954,8 +976,8 @@ td.num { color: var(--ok); font-family: var(--mono); font-weight: 600; }
   .col.is-celebrating .sparkle { display: block; animation: ghost-pop 1000ms ease-out both; }
   .col.is-celebrating { transition: box-shadow 300ms ease, border-color 300ms ease; }
 
-  .term.is-typing .ln { visibility: hidden; }
-  .term.is-typing .ln.on { visibility: visible; }
+  /* opacity (not visibility) keeps untyped lines in the accessibility tree. */
+  .term.is-typing .ln:not(.on) { opacity: 0; }
   .term.is-typing .ln--cmd.on { animation: type calc(var(--chars, 30) * 28ms) steps(var(--chars, 30), end) both; }
   .term.is-typing .ln--out.on { animation: fade-in 180ms ease-out both; }
   .term.is-typing .ln.is-current::after {

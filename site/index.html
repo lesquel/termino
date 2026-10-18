@@ -340,7 +340,7 @@ termino task move WEB-4 Done</code></pre>
             <pre class="cmd__pre"><code id="cmd-theme" data-theme-cmd>termino theme default</code></pre>
             <button type="button" class="copy" data-copy-target="cmd-theme" aria-label="Copy theme command" hidden>Copy</button>
           </div>
-          <p class="muted-p small">solarized-light is made for light terminals; high-contrast is monochrome with ASCII priority symbols. The spooky theme is a nod to the SpookyThon hackathon where termino started.</p>
+          <p class="muted-p small">solarized-light is made for light terminals; high-contrast is monochrome with ASCII priority symbols. The spooky theme is a nod to SpookyThon.</p>
         </div>
 
         <figure class="tui tui--compact" data-theme="default" data-border="rounded" aria-labelledby="themes-caption">
@@ -392,7 +392,9 @@ termino task move WEB-4 Done</code></pre>
           <li class="stat"><p class="stat__num">~3.8<span> ms</span></p><p class="stat__label">MCP <code>move_task</code></p><p class="stat__meta">1,000 tasks</p></li>
           <li class="stat"><p class="stat__num">13.3<span> MB</span></p><p class="stat__label">Binary size</p><p class="stat__meta">linux/amd64, stripped · target &lt; 30 MB</p></li>
         </ul>
-        <section class="table-wrap" tabindex="0" aria-label="Benchmark results, scrollable">
+        <!-- A scroll wrapper, not a document section: a labelled region with no heading is the precise role. -->
+        <!-- [html-validate-disable-next prefer-native-element] -->
+        <div class="table-wrap" role="region" tabindex="0" aria-label="Benchmark results, scrollable">
           <table class="perf">
             <caption>Benchmarks from <code>make bench</code></caption>
             <thead>
@@ -406,7 +408,7 @@ termino task move WEB-4 Done</code></pre>
               <tr><th scope="row">Binary size (linux/amd64, stripped)</th><td>&lt; 30 MB</td><td class="num">13.3 MB</td></tr>
             </tbody>
           </table>
-        </section>
+        </div>
         <p class="footnote">Measured with <code>make bench</code> (<code>go test -bench</code>) on an Intel i7-1255U, Linux, against a temporary SQLite database. Process start-up is not included.</p>
       </div>
     </section>
