@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -463,8 +464,26 @@ func (m RootModel) routeToScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model. Every screen other than the board is a dialog
-// drawn over it, so the board stays visible around the dialog.
+// drawn over it, so the board stays visible around the dialog. Every frame
+// fills the terminal height (see fillHeight).
 func (m RootModel) View() string {
+	return fillHeight(m.screenView(), m.height)
+}
+
+// fillHeight pads view with blank lines up to height. Bubble Tea's renderer
+// skips unchanged lines and, when a frame is shorter than the previous one,
+// erases the screen below the cursor; if the last line (the board footer)
+// was skipped, the cursor sits at its start and the erase wipes it. Dialog
+// frames are terminal-tall, so a shorter board frame after closing one lost
+// the key hints. Frames of a constant height never trigger that erase.
+func fillHeight(view string, height int) string {
+	if n := strings.Count(view, "\n") + 1; n < height {
+		view += strings.Repeat("\n", height-n)
+	}
+	return view
+}
+
+func (m RootModel) screenView() string {
 	var dialog string
 	switch m.screen {
 	case screenBoard:
