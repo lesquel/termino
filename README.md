@@ -19,13 +19,20 @@ connections.
 curl -fsSL https://raw.githubusercontent.com/lesquel/termino/main/install.sh | sh
 ```
 
-The script downloads the release archive for your OS/architecture plus
-`checksums.txt`, verifies the SHA-256 and refuses to install on a mismatch.
+The script detects your OS (`linux`, `darwin`) and architecture (`amd64`,
+`arm64`), resolves the latest release tag from the GitHub API, downloads the
+matching archive plus `checksums.txt`, verifies the SHA-256 and refuses to
+install on a mismatch. The binary goes to `$HOME/.local/bin`; if that is not
+on your `PATH`, the script prints a note so you can add it.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TERMINO_VERSION` | `latest` | Release tag to install, e.g. `v0.1.0` |
+| `TERMINO_VERSION` | `latest` | Release tag to install, e.g. `v0.3.2` |
 | `TERMINO_INSTALL_DIR` | `$HOME/.local/bin` | Where the binary goes |
+
+Windows is not covered by the script: download the `.zip` from the
+[releases page](https://github.com/lesquel/termino/releases) and put
+`termino.exe` on your `PATH`.
 
 ### Go
 
@@ -39,7 +46,29 @@ Requires Go 1.25+. No cgo is needed (`modernc.org/sqlite` is pure Go).
 
 Every release publishes `termino_<version>_<os>_<arch>.tar.gz` (`.zip` on
 Windows) for linux, darwin and windows on amd64 and arm64, and a
-`checksums.txt` with SHA-256 sums.
+`checksums.txt` with SHA-256 sums. Download the archive for your platform,
+verify it against `checksums.txt`, extract the `termino` binary and put it on
+your `PATH`.
+
+### First run
+
+```sh
+termino            # 1. first run: setup wizard, then the board
+termino setup      #    (re-run any time to edit setup or add a project)
+termino connect kiro   # 2. register the MCP server so Kiro can use the board
+termino doctor     # 3. confirm the install, database and integrations are healthy
+```
+
+### Updating and uninstalling
+
+Re-run the install script to update to the latest release (same command;
+`TERMINO_VERSION` pins a specific tag). `go install ...@latest` updates a
+Go-installed binary the same way.
+
+```sh
+termino uninstall           # remove integrations and registered files
+termino uninstall --purge   # also delete the database, config and state directory
+```
 
 ## Quick start
 
