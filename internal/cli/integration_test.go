@@ -53,6 +53,8 @@ func projectRoot() string {
 func runTermino(t *testing.T, env []string, args ...string) (string, string, error) {
 	t.Helper()
 	cmd := exec.Command(binaryPath, args...)
+	// Run outside the repository so a shared .termino/ there is never picked up.
+	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(), env...)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
