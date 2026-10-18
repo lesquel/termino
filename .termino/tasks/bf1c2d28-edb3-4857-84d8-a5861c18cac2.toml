@@ -1,0 +1,10 @@
+version = 1
+id = "bf1c2d28-edb3-4857-84d8-a5861c18cac2"
+number = 2
+title = "probar los diálogos nuevos"
+column = "In Progress"
+position = 1
+priority = "medium"
+created_at = 2026-10-17T23:31:48Z
+updated_at = 2026-10-18T01:01:58Z
+updated_by = "miquel"

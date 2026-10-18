@@ -1,0 +1,10 @@
+version = 1
+id = "7e9b35b7-2078-4e86-9d84-11a066ae898c"
+number = 3
+title = "hola"
+column = "Backlog"
+position = 3
+priority = "medium"
+created_at = 2026-10-18T00:31:30Z
+updated_at = 2026-10-18T00:31:30Z
+updated_by = "miquel"

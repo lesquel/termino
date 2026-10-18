@@ -1,0 +1,30 @@
+version = 1
+key = "PROJ"
+name = "termino"
+methodology = "kanban"
+
+[[columns]]
+name = "Backlog"
+position = 0
+wip_limit = 0
+
+[[columns]]
+name = "In Progress"
+position = 1
+wip_limit = 0
+
+[[columns]]
+name = "Done"
+position = 2
+wip_limit = 0
+
+[[members]]
+name = "kiro"
+kind = "agent"
+
+[[members]]
+name = "miquel"
+kind = "human"
+
+[[labels]]
+name = "ui"

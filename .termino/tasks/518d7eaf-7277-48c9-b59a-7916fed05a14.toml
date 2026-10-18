@@ -1,0 +1,11 @@
+version = 1
+id = "518d7eaf-7277-48c9-b59a-7916fed05a14"
+number = 9
+title = "Update README with all new features and installation"
+column = "Backlog"
+position = 4
+priority = "high"
+created_at = 2026-10-18T01:18:35Z
+updated_at = 2026-10-18T01:18:35Z
+updated_by = "kiro"
+description = "README must document every feature shipped up to v0.3.x (share, dialogs, themes, settings, widget, connect, doctor, uninstall, ...) and a clear install section (install.sh one-liner, go install, archives, PATH, first run, connect agent, verify). Releases now publish directly."

@@ -1,0 +1,10 @@
+version = 1
+id = "08cfefb8-92dc-4a74-b5b3-53a195004324"
+number = 1
+title = "hola"
+column = "Backlog"
+position = 1
+priority = "medium"
+labels = ["ui"]
+created_at = 2026-10-17T20:23:29Z
+updated_at = 2026-10-17T20:23:50Z
