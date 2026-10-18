@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in termino does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security issues go through
+        https://github.com/lesquel/termino/security/advisories/new, not here.
+  - type: input
+    id: version
+    attributes:
+      label: termino version
+      description: Output of `termino version`.
+      placeholder: termino 0.3.2
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: Ubuntu 24.04, linux/amd64
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      placeholder: kitty 0.36, tmux 3.4
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - install.sh
+        - go install
+        - Release archive
+        - Built from source
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `termino ...`
+        2. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages or screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: termino doctor output
+      description: Output of `termino doctor`.
+      render: text

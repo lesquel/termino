@@ -378,6 +378,13 @@ builds with GoReleaser and publishes a GitHub release with archives and
 (for example `v1.2.0-rc1`) are marked as pre-releases and skipped by
 `install.sh`.
 
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for
+the dev setup, checks, commit style and pull request flow. Everyone taking
+part follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities
+privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
