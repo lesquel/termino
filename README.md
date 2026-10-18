@@ -344,8 +344,10 @@ tool names and argument schemas; scoring an agent is a manual run described in
 the file.
 
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which
-builds with GoReleaser and creates a **draft** GitHub release with archives
-and `checksums.txt`; publish the draft to make it visible to `install.sh`.
+builds with GoReleaser and publishes a GitHub release with archives and
+`checksums.txt`, so `install.sh` picks it up right away. Pre-release tags
+(for example `v1.2.0-rc1`) are marked as pre-releases and skipped by
+`install.sh`.
 
 ## License
 

@@ -51,4 +51,7 @@ release:
   github:
     owner: lesquel
     name: termino
-  draft: true
+  # Publish immediately so install.sh (GitHub /releases/latest) sees it.
+  draft: false
+  # Tags like v1.2.0-rc1 become pre-releases and are skipped by /releases/latest.
+  prerelease: auto
