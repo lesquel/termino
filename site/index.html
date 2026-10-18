@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>termino — a local-first Kanban board for your terminal</title>
+  <meta name="description" content="termino keeps projects, boards and tasks in a single SQLite file on your machine. A TUI, a CLI and an MCP server for AI agents. No accounts, no network, no open ports.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0B0D14">
+  <meta property="og:title" content="termino — a local-first Kanban board for your terminal">
+  <meta property="og:description" content="One SQLite file. Three ways in: a TUI, a CLI and an MCP server your AI agents can use. No accounts, no network.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="wordmark" href="#top" aria-label="termino, back to top">
+        <span class="wordmark__prompt" aria-hidden="true">&gt;_</span>termino<span class="wordmark__cursor" aria-hidden="true"></span>
+      </a>
+      <nav aria-label="Primary">
+        <ul class="nav">
+          <li class="nav__wide"><a href="#features">Features</a></li>
+          <li class="nav__wide"><a href="#agents">Agents</a></li>
+          <li class="nav__wide"><a href="#themes">Themes</a></li>
+          <li class="nav__wide"><a href="#performance">Performance</a></li>
+          <li><a href="#install">Install</a></li>
+          <li>
+            <a class="nav__gh" href="https://github.com/lesquel/termino" aria-label="termino on GitHub">
+              <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span class="nav__gh-text">GitHub</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- 1. Hero -->
+    <section id="top" class="hero" aria-labelledby="hero-title">
+      <div class="container hero__grid">
+        <div class="hero__copy">
+          <p class="eyebrow"><span class="eyebrow__dot" aria-hidden="true"></span>Local-first · MIT · Go</p>
+          <h1 id="hero-title">Your Kanban board, <span class="grad">right in the terminal.</span></h1>
+          <p class="lede">termino keeps projects, boards and tasks in a single SQLite file on your machine, and gives you three ways in: a TUI, a CLI, and an MCP server your AI agents can use.</p>
+          <p class="trust">No accounts. No network. Opens no ports.</p>
+
+          <div class="cmd" data-label="Install">
+            <span class="cmd__prompt" aria-hidden="true">$</span>
+            <pre class="cmd__pre"><code id="cmd-hero">curl -fsSL https://raw.githubusercontent.com/lesquel/termino/main/install.sh | sh</code></pre>
+            <button type="button" class="copy" data-copy-target="cmd-hero" aria-label="Copy install command" hidden>Copy</button>
+          </div>
+
+          <div class="cta">
+            <a class="btn btn--primary" href="#install">Get started</a>
+            <a class="btn btn--ghost" href="https://github.com/lesquel/termino">View on GitHub</a>
+          </div>
+        </div>
+
+        <figure class="tui tui--hero" data-theme="default" data-border="rounded" aria-labelledby="board-caption">
+          <div class="tui__chrome" aria-hidden="true">
+            <span class="tui__dot"></span><span class="tui__dot"></span><span class="tui__dot"></span>
+            <span class="tui__wintitle">~/web-app — termino</span>
+          </div>
+          <div class="tui__screen">
+            <p class="tui__header"><span class="tui__brand">termino · Web app (WEB)</span><span class="tui__theme-name" data-theme-name>default</span></p>
+            <p class="tui__status" data-status aria-live="off">&nbsp;</p>
+            <div class="tui__cols" tabindex="0" role="group" aria-label="Board columns, scrollable">
+              <div role="group" class="col" aria-label="Backlog">
+                <p class="col__name">Backlog</p>
+                <ul class="col__list">
+                  <li class="card"><span class="sym sym--critical" data-sym="critical">!!!</span> <span class="card__ref">WEB-6</span> Rotate leaked API key</li>
+                  <li class="card"><span class="sym sym--high" data-sym="high">▲</span> <span class="card__ref">WEB-5</span> Add password reset</li>
+                  <li class="card"><span class="card__ref">WEB-7</span> Write the release notes</li>
+                </ul>
+              </div>
+              <div role="group" class="col col--active" aria-label="In Progress" data-col="progress">
+                <p class="col__name">In Progress <span class="col__wip" data-wip>[1/3]</span></p>
+                <ul class="col__list">
+                  <li class="card card--selected" data-card="WEB-4"><span class="card__sel" aria-hidden="true">&gt;</span><span class="visually-hidden">Selected:</span> <span class="sym sym--high" data-sym="high">▲</span> <span class="card__ref">WEB-4</span> Fix login redirect</li>
+                </ul>
+              </div>
+              <div role="group" class="col col--done" aria-label="Done" data-col="done">
+                <p class="col__name">Done</p>
+                <ul class="col__list">
+                  <li class="card"><span class="card__ref">WEB-2</span> Set up CI</li>
+                  <li class="card"><span class="sym sym--low" data-sym="low">▼</span> <span class="card__ref">WEB-3</span> Tidy footer links</li>
+                </ul>
+                <span class="sparkle" aria-hidden="true"><img src="assets/ghost.webp" alt="" width="48" height="48"></span>
+              </div>
+            </div>
+            <p class="tui__footer" aria-hidden="true"><kbd>h/l</kbd> columns · <kbd>H/L</kbd> move · <kbd>n</kbd> new · <kbd>/</kbd> filter · <kbd>s</kbd> settings · <kbd>?</kbd> help · <kbd>q</kbd> quit</p>
+          </div>
+          <figcaption id="board-caption" class="tui__caption">Demo board for the project “Web app” (key WEB). With motion on, the selected card WEB-4 moves from In Progress to Done and the status row celebrates.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 2. Demo: CLI + widget -->
+    <section id="demo" class="section" aria-labelledby="demo-title">
+      <div class="container">
+        <header class="section__head">
+          <p class="kicker">Live demo</p>
+          <h2 id="demo-title">A real board, not a to-do list</h2>
+          <p class="section__lede">The board above, the commands below and your shell prompt all read the same SQLite file. Change it from anywhere; everything else catches up.</p>
+        </header>
+        <div class="demo-grid">
+          <figure class="term-window">
+            <div class="term-window__bar" aria-hidden="true"><span class="tui__dot"></span><span class="tui__dot"></span><span class="tui__dot"></span><span class="term-window__title">bash — ~/web-app</span></div>
+<pre class="term" data-typing><span class="ln ln--cmd"><span class="ps">$</span> termino add Fix login redirect --priority high</span>
+<span class="ln ln--cmd"><span class="ps">$</span> termino task move WEB-4 "In Progress"</span>
+<span class="ln ln--cmd"><span class="ps">$</span> termino widget</span>
+<span class="ln ln--out ln--strong">Web app (WEB)</span>
+<span class="ln ln--out">Backlog 3 · In Progress 1 · Done 2</span>
+<span class="ln ln--out ln--strong">In progress</span>
+<span class="ln ln--out">  <span class="c-accent">WEB-4</span>  Fix login redirect</span>
+<span class="ln ln--out ln--strong">My tasks</span>
+<span class="ln ln--out">  <span class="c-accent">WEB-7</span>  Write the release notes · 2d</span>
+<span class="ln ln--out c-muted">→ termino board</span>
+<span class="ln ln--cmd"><span class="ps">$</span> termino task done WEB-4</span></pre>
+            <figcaption class="term-window__cap">A CLI session: add a task, move it, print the shell widget summary, finish it.</figcaption>
+          </figure>
+          <div class="demo-notes">
+            <article class="note">
+              <h3>Live refresh</h3>
+              <p>The TUI polls SQLite <code>PRAGMA data_version</code>, so changes made by the CLI, a teammate's pull or an agent appear without a restart.</p>
+            </article>
+            <article class="note">
+              <h3>Cards you can read without color</h3>
+              <p>Cards show as <code>KEY-N</code> with the theme's priority symbol: <code>▲</code> high, <code>!!!</code> critical, <code>▼</code> low; medium has none. The selected card is marked with <code>&gt;</code>.</p>
+            </article>
+            <article class="note">
+              <h3>A small celebration</h3>
+              <p>Moving a card into Done plays a short celebration, unless motion is off or <code>NO_COLOR</code> is set.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Three ways in -->
+    <section id="features" class="section" aria-labelledby="features-title">
+      <div class="container">
+        <header class="section__head">
+          <p class="kicker">Features</p>
+          <h2 id="features-title">One board. Three ways in.</h2>
+          <p class="section__lede">Pick the interface that fits the moment. They all share one local database.</p>
+        </header>
+        <div class="ways">
+          <article class="way">
+            <p class="way__tag" aria-hidden="true">01</p>
+            <h3>TUI</h3>
+            <p>A Kanban board with live refresh: vim keys, filters, WIP limits, dialogs over the board and a Done celebration.</p>
+            <pre class="snip"><code>termino</code></pre>
+          </article>
+          <article class="way">
+            <p class="way__tag" aria-hidden="true">02</p>
+            <h3>CLI</h3>
+            <p>Script everything: tasks, columns, members and sprints. Tasks are referenced as <code>KEY-N</code>.</p>
+            <pre class="snip"><code>termino add Fix login redirect
+termino ls
+termino task move WEB-4 Done</code></pre>
+          </article>
+          <article class="way">
+            <p class="way__tag" aria-hidden="true">03</p>
+            <h3>MCP</h3>
+            <p>An MCP server on stdio with 13 tools, so agents such as Kiro read and update the same board you are looking at.</p>
+            <pre class="snip"><code>termino mcp</code></pre>
+          </article>
+        </div>
+
+        <h3 class="strip__title">Also included</h3>
+        <ul class="also">
+          <li class="also__item">
+            <h4>Setup wizard</h4>
+            <p>Eight steps: name, project, key, methodology, directory, a theme with a live board preview, and the shell widget.</p>
+          </li>
+          <li class="also__item">
+            <h4>Shell prompt widget</h4>
+            <p>A short summary when bash or zsh starts. Read-only, and it gives up silently after 100&nbsp;ms.</p>
+            <pre class="snip snip--sm"><code>termino widget install</code></pre>
+          </li>
+          <li class="also__item">
+            <h4>Markdown import</h4>
+            <p>Pull in checkbox tasks from Kiro <code>tasks.md</code> or any <code>- [ ]</code> list; <code>--watch</code> keeps syncing.</p>
+            <pre class="snip snip--sm"><code>termino import tasks.md --watch</code></pre>
+          </li>
+          <li class="also__item">
+            <h4>Private by design</h4>
+            <p>One SQLite file under XDG paths. The binary opens no ports and makes no outbound connections.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4. AI agents -->
+    <section id="agents" class="section section--alt" aria-labelledby="agents-title">
+      <div class="container">
+        <header class="section__head">
+          <p class="kicker">AI agents</p>
+          <h2 id="agents-title">Your agent works the same board you do</h2>
+          <p class="section__lede">Connect Kiro with one command. It talks to <code>termino mcp</code> over stdio, on your machine.</p>
+        </header>
+        <div class="agents-grid">
+          <div class="agents__left">
+            <div class="cmd">
+              <span class="cmd__prompt" aria-hidden="true">$</span>
+              <pre class="cmd__pre"><code id="cmd-connect">termino connect kiro</code></pre>
+              <button type="button" class="copy" data-copy-target="cmd-connect" aria-label="Copy connect command" hidden>Copy</button>
+            </div>
+            <p class="muted-p">Adds a <code>termino</code> entry to <code>~/.kiro/settings/mcp.json</code> and writes <code>.kiro/steering/termino.md</code> in the current directory. <code>termino disconnect kiro</code> removes only what connect added. <code>termino mcp --read-only</code> exposes only the read tools; <code>--actor &lt;name&gt;</code> sets the agent identity.</p>
+
+            <div class="tools">
+              <div class="tools__group">
+                <h3>Read tools <span class="count">5</span></h3>
+                <ul class="chips">
+                  <li class="chip">list_projects</li>
+                  <li class="chip">get_board</li>
+                  <li class="chip">list_tasks</li>
+                  <li class="chip">get_task</li>
+                  <li class="chip">my_tasks</li>
+                </ul>
+              </div>
+              <div class="tools__group">
+                <h3>Write tools <span class="count count--w">8</span></h3>
+                <ul class="chips chips--write">
+                  <li class="chip">create_task</li>
+                  <li class="chip">update_task</li>
+                  <li class="chip">move_task</li>
+                  <li class="chip">assign_task</li>
+                  <li class="chip">claim_task</li>
+                  <li class="chip">complete_task</li>
+                  <li class="chip">add_comment</li>
+                  <li class="chip">delete_task</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <figure class="chat-window">
+            <figcaption class="chat-window__title">Example session</figcaption>
+            <ol class="chat">
+              <li class="msg msg--user"><span class="msg__who">You</span><p>Pick up the next high-priority task on WEB.</p></li>
+              <li class="msg msg--tool"><span class="msg__who">tool</span><code>get_board({ project_id: "WEB" })</code></li>
+              <li class="msg msg--agent"><span class="msg__who">Agent</span><p>WEB-5 “Add password reset” is high priority and unassigned. Claiming it.</p></li>
+              <li class="msg msg--tool"><span class="msg__who">tool</span><code>claim_task({ project_id: "WEB", task_id: "&lt;WEB-5 id&gt;" })</code></li>
+              <li class="msg msg--agent"><span class="msg__who">Agent</span><p>Done with the change. Leaving a note and closing it.</p></li>
+              <li class="msg msg--tool"><span class="msg__who">tool</span><code>add_comment({ task_id: "&lt;WEB-5 id&gt;", body: "Reset flow added" })</code></li>
+              <li class="msg msg--tool"><span class="msg__who">tool</span><code>complete_task({ project_id: "WEB", task_id: "&lt;WEB-5 id&gt;" })</code></li>
+            </ol>
+            <p class="chat-window__note">The board you have open refreshes live while the agent works.</p>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Share via git -->
+    <section id="share" class="section" aria-labelledby="share-title">
+      <div class="container">
+        <header class="section__head">
+          <p class="kicker">Teams</p>
+          <h2 id="share-title">Share a board through the repo you already use</h2>
+          <p class="section__lede">Plain-text files under <code>.termino/</code> stay in sync with the board, and git carries them between people.</p>
+        </header>
+        <div class="share-grid">
+          <ol class="steps">
+            <li class="step">
+              <span class="step__n" aria-hidden="true">1</span>
+              <div><h3>Open your repository</h3><pre class="snip"><code>cd my-repo</code></pre></div>
+            </li>
+            <li class="step">
+              <span class="step__n" aria-hidden="true">2</span>
+              <div><h3>Write the board to <code>.termino/</code></h3><pre class="snip"><code>termino share init</code></pre></div>
+            </li>
+            <li class="step">
+              <span class="step__n" aria-hidden="true">3</span>
+              <div><h3>Commit it like any other file</h3><pre class="snip"><code>git add .termino &amp;&amp; git commit -m "chore: share the termino board" &amp;&amp; git push</code></pre></div>
+            </li>
+          </ol>
+          <figure class="tree">
+<pre><code><span class="c-accent">.termino/</span>
+├── project.toml
+└── <span class="c-accent">tasks/</span>
+    ├── <span class="c-muted">0b1c…</span>.toml   <span class="c-dim"># one file per task</span>
+    ├── <span class="c-muted">4f9a…</span>.toml
+    └── <span class="c-muted">df7f…</span>.toml</code></pre>
+            <figcaption>Teammates pull and run <code>termino</code>; the board is created or merged by task.</figcaption>
+          </figure>
+        </div>
+        <ul class="facts">
+          <li class="fact"><h3>No server, no account</h3><p>git is the transport. Comments and activity history stay local.</p></li>
+          <li class="fact"><h3>One TOML file per task</h3><p>Edits to different tasks never conflict. A conflicted file is skipped and the status line warns <code>⚠ 1 shared file skipped — termino share status</code>.</p></li>
+          <li class="fact"><h3>You stay in charge of git</h3><p>termino never commits, pushes or pulls. <code>termino share off</code> stops syncing.</p></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 6. Themes -->
+    <section id="themes" class="section section--alt" aria-labelledby="themes-title">
+      <div class="container themes-grid">
+        <div class="themes__copy">
+          <header class="section__head section__head--left">
+            <p class="kicker">Themes</p>
+            <h2 id="themes-title">Nine built-in themes. Or bring your own.</h2>
+            <p class="section__lede">Pick one in the setup wizard, in settings (<kbd>s</kbd>) with a live preview, or from the CLI. Custom themes are a TOML file in <code>~/.config/termino/themes/</code>.</p>
+          </header>
+
+          <fieldset class="switcher" data-switcher hidden>
+            <legend class="visually-hidden">Board theme</legend>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="default" checked><span class="opt"><span class="swatch" data-theme="default" aria-hidden="true"><i></i><i></i><i></i></span>default</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="spooky"><span class="opt"><span class="swatch" data-theme="spooky" aria-hidden="true"><i></i><i></i><i></i></span>spooky</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="dracula"><span class="opt"><span class="swatch" data-theme="dracula" aria-hidden="true"><i></i><i></i><i></i></span>dracula</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="nord"><span class="opt"><span class="swatch" data-theme="nord" aria-hidden="true"><i></i><i></i><i></i></span>nord</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="gruvbox"><span class="opt"><span class="swatch" data-theme="gruvbox" aria-hidden="true"><i></i><i></i><i></i></span>gruvbox</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="catppuccin-mocha"><span class="opt"><span class="swatch" data-theme="catppuccin-mocha" aria-hidden="true"><i></i><i></i><i></i></span>catppuccin-mocha</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="tokyo-night"><span class="opt"><span class="swatch" data-theme="tokyo-night" aria-hidden="true"><i></i><i></i><i></i></span>tokyo-night</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="solarized-light"><span class="opt"><span class="swatch" data-theme="solarized-light" aria-hidden="true"><i></i><i></i><i></i></span>solarized-light</span></label>
+            <label class="opt-wrap"><input type="radio" name="board-theme" value="high-contrast"><span class="opt"><span class="swatch" data-theme="high-contrast" aria-hidden="true"><i></i><i></i><i></i></span>high-contrast</span></label>
+          </fieldset>
+
+          <ul class="theme-static" data-theme-static>
+            <li><span class="swatch" data-theme="default" aria-hidden="true"><i></i><i></i><i></i></span>default</li>
+            <li><span class="swatch" data-theme="spooky" aria-hidden="true"><i></i><i></i><i></i></span>spooky</li>
+            <li><span class="swatch" data-theme="dracula" aria-hidden="true"><i></i><i></i><i></i></span>dracula</li>
+            <li><span class="swatch" data-theme="nord" aria-hidden="true"><i></i><i></i><i></i></span>nord</li>
+            <li><span class="swatch" data-theme="gruvbox" aria-hidden="true"><i></i><i></i><i></i></span>gruvbox</li>
+            <li><span class="swatch" data-theme="catppuccin-mocha" aria-hidden="true"><i></i><i></i><i></i></span>catppuccin-mocha</li>
+            <li><span class="swatch" data-theme="tokyo-night" aria-hidden="true"><i></i><i></i><i></i></span>tokyo-night</li>
+            <li><span class="swatch" data-theme="solarized-light" aria-hidden="true"><i></i><i></i><i></i></span>solarized-light</li>
+            <li><span class="swatch" data-theme="high-contrast" aria-hidden="true"><i></i><i></i><i></i></span>high-contrast</li>
+          </ul>
+
+          <div class="cmd cmd--sm">
+            <span class="cmd__prompt" aria-hidden="true">$</span>
+            <pre class="cmd__pre"><code id="cmd-theme" data-theme-cmd>termino theme default</code></pre>
+            <button type="button" class="copy" data-copy-target="cmd-theme" aria-label="Copy theme command" hidden>Copy</button>
+          </div>
+          <p class="muted-p small">solarized-light is made for light terminals; high-contrast is monochrome with ASCII priority symbols. The spooky theme is a nod to the SpookyThon hackathon where termino started.</p>
+        </div>
+
+        <figure class="tui tui--compact" data-theme="default" data-border="rounded" aria-labelledby="themes-caption">
+          <div class="tui__chrome" aria-hidden="true">
+            <span class="tui__dot"></span><span class="tui__dot"></span><span class="tui__dot"></span>
+            <span class="tui__wintitle">termino</span>
+          </div>
+          <div class="tui__screen">
+            <p class="tui__header"><span class="tui__brand">termino · Web app (WEB)</span><span class="tui__theme-name" data-theme-name>default</span></p>
+            <p class="tui__status" data-theme-status aria-live="off"><span class="c-ok">✓</span> Theme set to <span data-theme-name>default</span></p>
+            <div class="tui__cols" tabindex="0" role="group" aria-label="Preview board columns, scrollable">
+              <div role="group" class="col" aria-label="Backlog">
+                <p class="col__name">Backlog</p>
+                <ul class="col__list">
+                  <li class="card"><span class="sym sym--critical" data-sym="critical">!!!</span> <span class="card__ref">WEB-6</span> Rotate leaked API key</li>
+                  <li class="card"><span class="sym sym--high" data-sym="high">▲</span> <span class="card__ref">WEB-5</span> Add password reset</li>
+                </ul>
+              </div>
+              <div role="group" class="col col--active" aria-label="In Progress">
+                <p class="col__name">In Progress <span class="col__wip">[1/3]</span></p>
+                <ul class="col__list">
+                  <li class="card card--selected"><span class="card__sel" aria-hidden="true">&gt;</span><span class="visually-hidden">Selected:</span> <span class="sym sym--high" data-sym="high">▲</span> <span class="card__ref">WEB-4</span> Fix login redirect</li>
+                </ul>
+              </div>
+              <div role="group" class="col col--done" aria-label="Done">
+                <p class="col__name">Done</p>
+                <ul class="col__list">
+                  <li class="card"><span class="sym sym--low" data-sym="low">▼</span> <span class="card__ref">WEB-3</span> Tidy footer links</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <figcaption id="themes-caption" class="tui__caption">Theme preview. The switcher recolors this board and the one at the top of the page with each theme's real palette and symbols.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 7. Performance -->
+    <section id="performance" class="section" aria-labelledby="perf-title">
+      <div class="container">
+        <header class="section__head">
+          <p class="kicker">Performance</p>
+          <h2 id="perf-title">Fast where it counts</h2>
+          <p class="section__lede">One Go binary over a local SQLite file. No server, no round trips.</p>
+        </header>
+        <ul class="stats">
+          <li class="stat"><p class="stat__num">~2.5<span> ms</span></p><p class="stat__label">Shell widget summary</p><p class="stat__meta">500 tasks · target &lt; 100 ms</p></li>
+          <li class="stat"><p class="stat__num">~11<span> ms</span></p><p class="stat__label">Board key + redraw</p><p class="stat__meta">1,000 tasks · target &lt; 50 ms</p></li>
+          <li class="stat"><p class="stat__num">~3.8<span> ms</span></p><p class="stat__label">MCP <code>move_task</code></p><p class="stat__meta">1,000 tasks</p></li>
+          <li class="stat"><p class="stat__num">13.3<span> MB</span></p><p class="stat__label">Binary size</p><p class="stat__meta">linux/amd64, stripped · target &lt; 30 MB</p></li>
+        </ul>
+        <section class="table-wrap" tabindex="0" aria-label="Benchmark results, scrollable">
+          <table class="perf">
+            <caption>Benchmarks from <code>make bench</code></caption>
+            <thead>
+              <tr><th scope="col">Measure</th><th scope="col">Target</th><th scope="col">Measured</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Widget summary: open DB + query + render, 500 tasks</th><td>&lt; 100 ms</td><td class="num">~2.5 ms</td></tr>
+              <tr><th scope="row">Board key + redraw, 1,000 tasks</th><td>&lt; 50 ms</td><td class="num">~11 ms</td></tr>
+              <tr><th scope="row">Board reload after a change, 1,000 tasks</th><td>—</td><td class="num">~8.7 ms</td></tr>
+              <tr><th scope="row">MCP <code>get_board</code> / <code>list_tasks</code> / <code>move_task</code>, 1,000 tasks</th><td>—</td><td class="num">~10.6 / ~10.4 / ~3.8 ms</td></tr>
+              <tr><th scope="row">Binary size (linux/amd64, stripped)</th><td>&lt; 30 MB</td><td class="num">13.3 MB</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <p class="footnote">Measured with <code>make bench</code> (<code>go test -bench</code>) on an Intel i7-1255U, Linux, against a temporary SQLite database. Process start-up is not included.</p>
+      </div>
+    </section>
+
+    <!-- 8. Install -->
+    <section id="install" class="section section--alt" aria-labelledby="install-title">
+      <div class="container container--narrow">
+        <header class="section__head">
+          <p class="kicker">Install</p>
+          <h2 id="install-title">Install in one line</h2>
+          <p class="section__lede">Linux, macOS and Windows on amd64 and arm64. MIT licensed.</p>
+        </header>
+
+        <div class="tabs" data-tabs>
+          <div class="tabs__list" role="tablist" aria-label="Install method" hidden>
+            <button type="button" role="tab" id="tab-script" aria-controls="panel-script" aria-selected="true" tabindex="0">Install script</button>
+            <button type="button" role="tab" id="tab-go" aria-controls="panel-go" aria-selected="false" tabindex="-1">Go</button>
+            <button type="button" role="tab" id="tab-releases" aria-controls="panel-releases" aria-selected="false" tabindex="-1">Release archives</button>
+          </div>
+
+          <div class="tabs__panel" role="tabpanel" id="panel-script" aria-labelledby="tab-script" tabindex="0">
+            <h3 class="tabs__heading">Install script (Linux, macOS)</h3>
+            <div class="cmd">
+              <span class="cmd__prompt" aria-hidden="true">$</span>
+              <pre class="cmd__pre"><code id="cmd-script">curl -fsSL https://raw.githubusercontent.com/lesquel/termino/main/install.sh | sh</code></pre>
+              <button type="button" class="copy" data-copy-target="cmd-script" aria-label="Copy install script command" hidden>Copy</button>
+            </div>
+            <p>Detects <code>linux</code>/<code>darwin</code> and <code>amd64</code>/<code>arm64</code>, verifies the SHA-256 against <code>checksums.txt</code> and refuses to install on a mismatch. The binary goes to <code>$HOME/.local/bin</code>.</p>
+            <div class="table-wrap table-wrap--plain">
+              <table class="vars">
+                <caption class="visually-hidden">Install script environment variables</caption>
+                <thead><tr><th scope="col">Variable</th><th scope="col">Default</th><th scope="col">Meaning</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row"><code>TERMINO_VERSION</code></th><td><code>latest</code></td><td>Release tag to install, e.g. <code>v0.3.2</code></td></tr>
+                  <tr><th scope="row"><code>TERMINO_INSTALL_DIR</code></th><td><code>$HOME/.local/bin</code></td><td>Where the binary goes</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="tabs__panel" role="tabpanel" id="panel-go" aria-labelledby="tab-go" tabindex="0">
+            <h3 class="tabs__heading">Go</h3>
+            <div class="cmd">
+              <span class="cmd__prompt" aria-hidden="true">$</span>
+              <pre class="cmd__pre"><code id="cmd-go">go install github.com/lesquel/termino/cmd/termino@latest</code></pre>
+              <button type="button" class="copy" data-copy-target="cmd-go" aria-label="Copy go install command" hidden>Copy</button>
+            </div>
+            <p>Requires Go 1.25+. No cgo is needed: the SQLite driver is pure Go.</p>
+          </div>
+
+          <div class="tabs__panel" role="tabpanel" id="panel-releases" aria-labelledby="tab-releases" tabindex="0">
+            <h3 class="tabs__heading">Release archives</h3>
+            <p>Every release publishes archives for linux, darwin and windows on amd64 and arm64, plus <code>checksums.txt</code> with SHA-256 sums. On Windows, download the <code>.zip</code> and put <code>termino.exe</code> on your <code>PATH</code>.</p>
+            <p><a class="btn btn--ghost" href="https://github.com/lesquel/termino/releases">Browse releases on GitHub</a></p>
+          </div>
+        </div>
+
+        <h3 class="firstrun__title">First run</h3>
+        <div class="cmd cmd--block">
+<pre class="cmd__pre"><code id="cmd-first">termino                # setup wizard, then the board
+termino connect kiro   # register the MCP server so Kiro can use the board
+termino doctor         # confirm the install, database and integrations are healthy</code></pre>
+          <button type="button" class="copy" data-copy-target="cmd-first" aria-label="Copy first run commands" hidden>Copy</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <div class="site-footer__brand">
+        <p class="wordmark wordmark--footer"><span class="wordmark__prompt" aria-hidden="true">&gt;_</span>termino</p>
+        <p class="muted-p small">A local-first Kanban board for the terminal. <a href="https://github.com/lesquel/termino/blob/main/LICENSE">MIT licensed</a>.</p>
+        <p class="spooky"><img src="assets/ghost.webp" alt="" width="40" height="40" loading="lazy"> Built for SpookyThon 2026</p>
+      </div>
+      <nav class="site-footer__nav" aria-label="Footer">
+        <ul>
+          <li><a href="https://github.com/lesquel/termino">GitHub</a></li>
+          <li><a href="https://github.com/lesquel/termino/releases">Releases</a></li>
+          <li><a href="https://github.com/lesquel/termino#readme">Docs (README)</a></li>
+          <li><a href="https://github.com/lesquel/termino/blob/main/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/lesquel/termino/blob/main/SECURITY.md">Security</a></li>
+        </ul>
+      </nav>
+      <p class="site-footer__note small">No trackers on this page either.</p>
+    </div>
+  </footer>
+
+  <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+</body>
+</html>
