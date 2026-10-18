@@ -532,3 +532,25 @@ func (r *LabelRepository) Attach(ctx context.Context, taskID, labelID string) er
 	}
 	return nil
 }
+
+// ListByProject returns every label of the project ordered by name.
+func (r *LabelRepository) ListByProject(ctx context.Context, projectID string) ([]taskdomain.Label, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, project_id, name, color
+		FROM   labels
+		WHERE  project_id = ?
+		ORDER  BY lower(name), name`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("label.ListByProject: %w", err)
+	}
+	defer rows.Close()
+	var labels []taskdomain.Label
+	for rows.Next() {
+		var l taskdomain.Label
+		if err := rows.Scan(&l.ID, &l.ProjectID, &l.Name, &l.Color); err != nil {
+			return nil, fmt.Errorf("label row scan: %w", err)
+		}
+		labels = append(labels, l)
+	}
+	return labels, rows.Err()
+}

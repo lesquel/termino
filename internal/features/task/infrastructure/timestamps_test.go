@@ -117,3 +117,19 @@ func TestTaskRepository_SaveDuplicateNumber(t *testing.T) {
 		t.Fatalf("Save duplicate = %v, want ErrDuplicateNumber", err)
 	}
 }
+
+func TestLabelRepository_ListByProject(t *testing.T) {
+	db := openTestDB(t)
+	seedProjectAndColumn(t, db, "proj-lbl", "LBL", "col-lbl")
+	repo := taskinfra.NewLabelRepository(db)
+	ctx := context.Background()
+	for _, l := range []taskdomain.Label{{ID: "l2", ProjectID: "proj-lbl", Name: "ui"}, {ID: "l1", ProjectID: "proj-lbl", Name: "bug", Color: "#f00"}} {
+		if err := repo.Save(ctx, l); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := repo.ListByProject(ctx, "proj-lbl")
+	if err != nil || len(got) != 2 || got[0].Name != "bug" || got[0].Color != "#f00" || got[1].Name != "ui" {
+		t.Errorf("ListByProject = %+v, %v", got, err)
+	}
+}

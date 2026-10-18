@@ -15,6 +15,8 @@ import (
 	memberinfra "github.com/lesquel/termino/internal/features/member/infrastructure"
 	projectapp "github.com/lesquel/termino/internal/features/project/application"
 	projectinfra "github.com/lesquel/termino/internal/features/project/infrastructure"
+	shareapp "github.com/lesquel/termino/internal/features/share/application"
+	shareinfra "github.com/lesquel/termino/internal/features/share/infrastructure"
 	sprintapp "github.com/lesquel/termino/internal/features/sprint/application"
 	sprintinfra "github.com/lesquel/termino/internal/features/sprint/infrastructure"
 	taskapp "github.com/lesquel/termino/internal/features/task/application"
@@ -41,6 +43,7 @@ type Container struct {
 	memberUC  *memberapp.MemberUseCases
 	widgetUC  *widgetapp.WidgetUseCases
 	agentUC   *application.AgentUseCases
+	shareSvc  *shareapp.ShareService
 }
 
 // Config returns the loaded configuration, loading it once.
@@ -100,9 +103,10 @@ func (c *Container) projectUseCasesLocked() (*projectapp.ProjectUseCases, error)
 			return nil, err
 		}
 		bus := &events.Bus{}
+		share := c.shareServiceLocked(db)
 		c.projectUC = projectapp.NewProjectUseCases(
-			projectinfra.NewProjectRepository(db),
-			boardinfra.NewBoardRepository(db),
+			share.Projects(projectinfra.NewProjectRepository(db)),
+			share.Board(boardinfra.NewBoardRepository(db)),
 			bus,
 		)
 	}
@@ -124,13 +128,14 @@ func (c *Container) TaskUseCases() (*taskapp.TaskUseCases, error) {
 			return nil, err
 		}
 		bus := &events.Bus{}
+		share := c.shareServiceLocked(db)
 		c.taskUC = taskapp.NewTaskUseCases(
-			taskinfra.NewTaskRepository(db),
+			share.Tasks(taskinfra.NewTaskRepository(db)),
 			taskinfra.NewCommentRepository(db),
 			taskinfra.NewActivityRepository(db),
-			boardinfra.NewBoardRepository(db),
+			share.Board(boardinfra.NewBoardRepository(db)),
 			bus,
-		).WithMethodologies(projectUC).WithLabels(taskinfra.NewLabelRepository(db))
+		).WithMethodologies(projectUC).WithLabels(share.Labels(taskinfra.NewLabelRepository(db)))
 	}
 	return c.taskUC, nil
 }
@@ -144,9 +149,10 @@ func (c *Container) BoardUseCases() (*boardapp.BoardUseCases, error) {
 		if err != nil {
 			return nil, err
 		}
+		share := c.shareServiceLocked(db)
 		c.boardUC = boardapp.NewBoardUseCases(
-			boardinfra.NewBoardRepository(db),
-			taskinfra.NewTaskRepository(db),
+			share.Board(boardinfra.NewBoardRepository(db)),
+			share.Tasks(taskinfra.NewTaskRepository(db)),
 		)
 	}
 	return c.boardUC, nil
@@ -161,9 +167,10 @@ func (c *Container) SprintUseCases() (*sprintapp.SprintUseCases, error) {
 		if err != nil {
 			return nil, err
 		}
+		share := c.shareServiceLocked(db)
 		c.sprintUC = sprintapp.NewSprintUseCases(
-			sprintinfra.NewSprintRepository(db),
-			taskinfra.NewTaskRepository(db),
+			share.Sprints(sprintinfra.NewSprintRepository(db)),
+			share.Tasks(taskinfra.NewTaskRepository(db)),
 		)
 	}
 	return c.sprintUC, nil
@@ -179,10 +186,46 @@ func (c *Container) MemberUseCases() (*memberapp.MemberUseCases, error) {
 			return nil, err
 		}
 		c.memberUC = memberapp.NewMemberUseCases(
-			memberinfra.NewMemberRepository(db),
+			c.shareServiceLocked(db).Members(memberinfra.NewMemberRepository(db)),
 		)
 	}
 	return c.memberUC, nil
+}
+
+// ShareService returns the repository-sharing service. Its repositories are
+// the undecorated ones: import must write through them (or through use cases
+// built on undecorated repositories) so applying shared files never exports.
+func (c *Container) ShareService() (*shareapp.ShareService, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	db, err := c.dbLocked()
+	if err != nil {
+		return nil, err
+	}
+	return c.shareServiceLocked(db), nil
+}
+
+// shareServiceLocked wires the share service once. Every use case writes
+// through repositories wrapped by it, so TUI, CLI and MCP mutations of a
+// project with a share root are exported to <share_root>/.termino/. Export
+// failures go to the termino log file, never to stdout (MCP stdio). Must be
+// called with c.mu held.
+func (c *Container) shareServiceLocked(db *sql.DB) *shareapp.ShareService {
+	if c.shareSvc == nil {
+		c.shareSvc = shareapp.NewShareService(shareapp.Deps{
+			Projects: projectinfra.NewProjectRepository(db),
+			Board:    boardinfra.NewBoardRepository(db),
+			Tasks:    taskinfra.NewTaskRepository(db),
+			Members:  memberinfra.NewMemberRepository(db),
+			Labels:   taskinfra.NewLabelRepository(db),
+			Sprints:  sprintinfra.NewSprintRepository(db),
+			Files:    shareinfra.FileStore{},
+			Hashes:   shareinfra.NewHashRepository(db),
+			Codec:    shareinfra.TOMLCodec{},
+			Logger:   fileLogger,
+		})
+	}
+	return c.shareSvc
 }
 
 // WidgetUseCases returns the widget use-case object.
