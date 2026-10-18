@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentes de IA con Kiro + Gentle-AI · SpookyThon 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400..900&family=Pixelify+Sans:wght@400..700&display=swap">
+<!--
+  SpookyThon slide template.
+  - One <section class="slide"> per slide; the footer (organizers, sponsors, counter) is injected by the script.
+  - Layout helpers: .grid-2 / .grid-3 / .grid-4, .flow (cards joined by arrows), .card, .chip, .tbl.
+  - Mascot: <div class="mascot"><p class="say">…</p><img …></div> puts the ghost and a speech bubble in the top-right corner.
+  - Slide variants: .cover, .divider, .statement, .accent, .closing.
+  - Speaker notes go in <aside class="notes">. Keys: arrows/space = navigate, N = notes, F = fullscreen.
+  - Sponsors and organizers are defined once in the BRAND object at the bottom.
+-->
+<style>
+:root {
+  --night: #140930;
+  --night-deep: #0b0520;
+  --panel: rgba(34, 18, 78, .92);
+  --panel-hi: rgba(52, 28, 112, .94);
+  --border: #8b5cf6;
+  --violet: #b98cff;
+  --violet-dark: #7c3aed;
+  --orange: #ff9900;
+  --orange-light: #ffc266;
+  --cream: #fff6e6;
+  --ink: #1f1140;
+  --text: #fbf8ff;
+  --muted: #ddd5f3;
+  --subtle: #b9aedb;
+  --pixel: "Pixelify Sans", "Courier New", monospace;
+  --body: "Nunito", system-ui, Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #07031a; overflow: hidden; }
+body { font-family: var(--body); color: var(--text); }
+
+.deck { position: fixed; inset: 0; }
+.stage {
+  position: absolute; left: 50%; top: 50%;
+  width: 1920px; height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  transform-origin: center;
+  overflow: hidden;
+  box-shadow: 0 0 120px rgba(139, 92, 246, .3);
+}
+
+/* ---------- Slide base: cozy night sky over the haunted campus ---------- */
+.slide {
+  position: absolute; inset: 0;
+  padding: 92px 120px 150px;
+  display: flex; flex-direction: column; gap: 30px;
+  background:
+    linear-gradient(180deg, rgba(20, 9, 48, .97) 0%, rgba(26, 12, 62, .93) 55%, rgba(26, 12, 62, .62) 100%),
+    url("assets/spookython-haunted-campus.webp") center bottom / cover no-repeat,
+    var(--night);
+  opacity: 0; visibility: hidden;
+  transition: opacity .35s ease, visibility .35s;
+}
+.slide.active { opacity: 1; visibility: visible; }
+.slide.active > *:not(.foot):not(.notes):not(img):not(.mascot):not(h1):not(h2):not(.chip):not(.term):not(.promo) { animation: rise .5s ease both; }
+.slide.active > *:nth-child(2) { animation-delay: .06s; }
+.slide.active > *:nth-child(3) { animation-delay: .12s; }
+.slide.active > *:nth-child(4) { animation-delay: .18s; }
+.slide.active > *:nth-child(5) { animation-delay: .24s; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+/* Sparkles */
+.slide::before {
+  content: "✦"; position: absolute; left: 0; top: 0; font-size: 26px; color: transparent; pointer-events: none;
+  text-shadow:
+    150px 60px 0 var(--orange-light), 470px 150px 0 #f0abfc, 760px 50px 0 var(--orange-light),
+    1010px 120px 0 #f0abfc, 1840px 420px 0 var(--orange-light), 50px 430px 0 #f0abfc,
+    70px 820px 0 var(--orange-light), 1860px 760px 0 #f0abfc, 1130px 30px 0 var(--violet);
+  animation: twinkle 3.5s ease-in-out infinite alternate;
+}
+@keyframes twinkle { from { opacity: .35; } to { opacity: .95; } }
+
+/* Moon glow */
+.slide::after {
+  content: ""; position: absolute; right: -150px; top: -190px; width: 620px; height: 620px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 190, 90, .34) 0%, rgba(255, 153, 0, .12) 42%, transparent 68%);
+  pointer-events: none;
+}
+
+/* ---------- Type ---------- */
+h1, h2, h3, .chip, .num, th { font-family: var(--pixel); }
+h1 { font-size: 124px; line-height: 1.05; font-weight: 600; text-shadow: 5px 5px 0 rgba(124, 58, 237, .65); }
+h2 { font-size: 74px; line-height: 1.08; font-weight: 600; text-shadow: 4px 4px 0 rgba(124, 58, 237, .65); max-width: 1120px; }
+h2.wide { max-width: none; }
+h3 { font-size: 40px; line-height: 1.15; font-weight: 600; }
+p, li { font-size: 30px; line-height: 1.4; color: var(--muted); font-weight: 500; }
+p.lead { font-size: 34px; color: var(--text); max-width: 1500px; font-weight: 600; }
+b, strong { color: var(--text); font-weight: 800; }
+.hl { color: var(--orange); }
+.vl { color: var(--violet); }
+code {
+  font-family: "Courier New", monospace; font-size: .9em; font-weight: 700; color: var(--orange-light);
+  background: rgba(11, 5, 32, .7); padding: 2px 12px; border-radius: 10px;
+}
+.chip {
+  align-self: flex-start;
+  font-size: 24px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600;
+  color: var(--ink); background: var(--orange);
+  padding: 8px 24px; border-radius: 999px; box-shadow: 0 6px 0 rgba(124, 58, 237, .8);
+}
+.num {
+  width: 72px; height: 72px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 44px; line-height: 1; font-weight: 600; color: var(--ink); background: var(--orange);
+}
+.ico {
+  width: 80px; height: 80px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 42px; line-height: 1;
+  background: rgba(255, 153, 0, .2); border: 3px solid rgba(255, 194, 102, .55);
+}
+
+/* ---------- Cards and layouts ---------- */
+.grid-2, .grid-3, .grid-4 { display: grid; gap: 32px; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 34px 34px 32px;
+  background: linear-gradient(165deg, var(--panel-hi), var(--panel));
+  border: 3px solid var(--border); border-radius: 28px;
+  box-shadow: 0 10px 0 rgba(11, 5, 32, .55), 0 0 36px rgba(139, 92, 246, .28);
+}
+.card h3 { color: var(--orange-light); }
+.card.violet h3 { color: var(--violet); }
+.card.violet .ico { background: rgba(185, 140, 255, .2); border-color: rgba(185, 140, 255, .6); }
+.card.violet .num { background: var(--violet); }
+.card.row { flex-direction: row; align-items: flex-start; gap: 22px; padding: 28px 28px 26px; }
+.card.row > div { display: flex; flex-direction: column; gap: 8px; }
+.card.row p { font-size: 26px; line-height: 1.35; }
+.card.tight { padding: 26px 24px 24px; gap: 10px; }
+.card.tight p { font-size: 25px; line-height: 1.35; }
+.card.tight h3 { font-size: 36px; }
+.tag { font-size: 22px; letter-spacing: 1px; text-transform: uppercase; color: var(--subtle); font-weight: 800; }
+
+.flow { display: flex; gap: 52px; align-items: stretch; }
+.flow > .card { flex: 1; }
+.flow > .card:not(:last-child)::after {
+  content: "➜"; position: absolute; right: -45px; top: 50%; transform: translateY(-50%);
+  font-size: 34px; color: var(--orange);
+}
+.flow.small { gap: 30px; }
+.flow.small > .card { padding: 24px 16px 20px; gap: 10px; border-radius: 22px; align-items: flex-start; }
+.flow.small > .card:not(:last-child)::after { right: -29px; font-size: 22px; }
+.flow.small h3 { font-size: 27px; }
+.flow.small p { font-size: 23px; line-height: 1.3; }
+.flow.small .num { width: 52px; height: 52px; font-size: 32px; }
+
+.tbl { width: 100%; border-collapse: separate; border-spacing: 0; border: 3px solid var(--border); border-radius: 26px; overflow: hidden; box-shadow: 0 10px 0 rgba(11, 5, 32, .55), 0 0 36px rgba(139, 92, 246, .28); }
+.tbl th { text-align: left; font-size: 30px; color: var(--ink); background: var(--orange); padding: 18px 28px; font-weight: 600; }
+.tbl td { font-size: 28px; line-height: 1.3; padding: 18px 28px; color: var(--text); font-weight: 600; background: rgba(34, 18, 78, .95); border-top: 2px solid rgba(139, 92, 246, .5); }
+.tbl tr:nth-child(odd) td { background: rgba(52, 28, 112, .95); }
+.tbl td:first-child { color: var(--orange-light); font-weight: 800; }
+
+/* Mascot with speech bubble */
+.mascot { position: absolute; right: 100px; top: 56px; display: flex; align-items: center; gap: 26px; z-index: 2; }
+.mascot img { width: 178px; image-rendering: pixelated; animation: float 4s ease-in-out infinite; filter: drop-shadow(0 0 30px rgba(185, 140, 255, .6)); }
+.say {
+  position: relative; max-width: 400px;
+  font-size: 26px; line-height: 1.25; font-weight: 800; color: var(--ink);
+  background: var(--cream); padding: 16px 24px; border-radius: 26px; border: 3px solid var(--orange);
+  box-shadow: 0 6px 0 rgba(11, 5, 32, .5);
+}
+.say::after {
+  content: ""; position: absolute; right: -19px; top: 50%; transform: translateY(-50%);
+  border: 10px solid transparent; border-left: 18px solid var(--orange); border-right: 0;
+}
+@keyframes float { from { transform: translateY(0); } 50% { transform: translateY(-16px); } to { transform: translateY(0); } }
+.art { position: absolute; image-rendering: pixelated; animation: float 5s ease-in-out infinite; filter: drop-shadow(0 0 50px rgba(185, 140, 255, .5)); }
+
+.pills { display: flex; gap: 20px; flex-wrap: wrap; }
+.pill { font-size: 24px; font-weight: 700; color: var(--text); padding: 12px 26px; background: rgba(34, 18, 78, .92); border: 3px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.pill.hot { border-color: var(--orange); }
+.pill b { color: var(--orange-light); }
+
+/* ---------- Footer (injected) ---------- */
+.foot {
+  position: absolute; left: 120px; right: 120px; bottom: 40px;
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+  padding: 12px 26px; border-radius: 999px;
+  background: rgba(11, 5, 32, .78); border: 2px solid rgba(139, 92, 246, .6);
+  font-size: 22px; font-weight: 600; color: var(--muted); white-space: nowrap;
+}
+.foot .brand { display: flex; align-items: center; gap: 14px; }
+.foot .brand img { width: 40px; height: 40px; image-rendering: pixelated; }
+.foot .brand b { font-family: var(--pixel); color: var(--orange); font-size: 26px; font-weight: 600; }
+.foot .right { display: flex; align-items: center; gap: 10px; }
+.foot .sp { padding: 3px 16px; border-radius: 999px; color: var(--ink); background: var(--cream); font-weight: 800; }
+.foot .count { font-family: var(--pixel); color: var(--orange); font-size: 26px; padding-left: 12px; }
+
+/* ---------- Variants ---------- */
+.cover {
+  justify-content: center; gap: 28px;
+  background:
+    linear-gradient(90deg, rgba(20, 9, 48, .95) 0%, rgba(20, 9, 48, .78) 46%, rgba(20, 9, 48, .05) 100%),
+    url("assets/spookython-haunted-campus.webp") right center / cover no-repeat,
+    var(--night);
+}
+.cover::before, .cover::after { display: none; }
+.cover h1 { max-width: 1120px; }
+.cover .by { font-size: 34px; color: var(--text); font-weight: 700; }
+.cover .tagline { font-size: 30px; max-width: 980px; color: var(--muted); }
+
+.divider { justify-content: center; gap: 22px; }
+.divider .num { width: 150px; height: 150px; font-size: 92px; }
+.divider h1 { max-width: 1000px; }
+.divider p { max-width: 880px; font-size: 34px; color: var(--text); font-weight: 600; }
+.divider .art { right: 100px; top: 190px; width: 760px; }
+
+.statement { justify-content: center; gap: 34px; }
+.statement h1 { max-width: 1120px; font-size: 108px; }
+.statement p.lead { max-width: 1050px; }
+.statement .art { right: 70px; top: 230px; width: 660px; }
+
+.accent {
+  background:
+    radial-gradient(circle at 85% 25%, rgba(255, 230, 170, .55), transparent 45%),
+    linear-gradient(160deg, #ffad2e, #ff8a00);
+  color: var(--ink);
+}
+.accent::before { text-shadow: 150px 60px 0 #fff, 760px 50px 0 #fff, 1840px 420px 0 #fff, 70px 820px 0 #fff, 1130px 30px 0 #fff; }
+.accent::after { display: none; }
+.accent h1 { color: var(--ink); text-shadow: 5px 5px 0 rgba(255, 255, 255, .45); max-width: 1150px; font-size: 108px; }
+.accent p, .accent li, .accent b { color: var(--ink); }
+.accent .chip { background: var(--ink); color: var(--orange-light); box-shadow: 0 6px 0 rgba(255, 255, 255, .5); }
+.accent ol { list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 16px; }
+.accent ol li { counter-increment: s; font-size: 36px; font-weight: 700; display: flex; gap: 22px; align-items: center; }
+.accent ol li::before {
+  content: counter(s); font-family: var(--pixel); font-size: 40px; width: 68px; height: 68px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--ink); color: var(--orange-light); flex: none;
+}
+.accent .placeholder { border: 3px dashed var(--ink); border-radius: 22px; padding: 16px 26px; font-size: 30px; align-self: flex-start; background: rgba(255, 255, 255, .3); }
+.accent .art { right: 110px; top: 300px; width: 540px; filter: drop-shadow(0 14px 0 rgba(31, 17, 64, .18)); }
+.accent .foot { background: var(--ink); border-color: var(--ink); }
+
+.closing { align-items: center; text-align: center; gap: 28px; }
+.closing .chip { align-self: center; }
+.closing h2 { max-width: none; }
+.closing .sponsors { display: flex; gap: 32px; }
+.sponsor {
+  width: 400px; height: 164px; display: flex; align-items: center; justify-content: center; gap: 20px;
+  background: var(--cream); color: var(--ink); border: 4px solid var(--orange); border-radius: 30px;
+  box-shadow: 0 10px 0 rgba(124, 58, 237, .85);
+  font-family: var(--pixel); font-size: 46px; font-weight: 600;
+}
+.sponsor img { width: 100px; height: 100px; object-fit: contain; border-radius: 18px; }
+.closing .pills { justify-content: center; }
+.closing .camp { position: absolute; left: 50%; bottom: 104px; width: 1080px; transform: translateX(-50%); }
+
+/* ---------- Chrome ---------- */
+.progress { position: fixed; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, var(--orange), var(--violet)); width: 0; transition: width .3s; z-index: 5; }
+.notes {
+  display: none; position: absolute; left: 120px; right: 120px; bottom: 130px; z-index: 4;
+  background: rgba(7, 3, 26, .96); border: 3px solid var(--orange); border-radius: 24px; padding: 24px 30px;
+  font-size: 28px; line-height: 1.4; color: var(--text); text-align: left;
+}
+.show-notes .slide.active .notes { display: block; }
+.hint { position: fixed; right: 16px; top: 10px; font: 13px var(--body); color: #7a6fa8; z-index: 5; }
+
+@media print {
+  @page { size: 1920px 1080px; margin: 0; }
+  html, body { height: auto; overflow: visible; background: none; }
+  .deck { position: static; }
+  .stage { position: static; transform: none; width: auto; height: auto; box-shadow: none; overflow: visible; }
+  .slide { position: relative; width: 1920px; height: 1080px; opacity: 1; visibility: visible; overflow: hidden; page-break-after: always; break-after: page; }
+  .slide > * { animation: none !important; }
+  .progress, .hint { display: none; }
+  .slide { filter: none !important; transform: none !important; }
+}
+
+/* ---------- Motion layer ---------- */
+.slide { transform: scale(.965); filter: blur(8px); transition: opacity .55s ease, visibility .55s, transform .7s cubic-bezier(.2, .8, .2, 1), filter .55s ease; }
+.slide.active { transform: none; filter: none; }
+
+/* Titles arrive word by word */
+.w { display: inline-block; }
+.slide.active .w { animation: wordIn .65s cubic-bezier(.2, 1.3, .4, 1) backwards; animation-delay: calc(var(--w) * 55ms + .12s); }
+@keyframes wordIn { from { opacity: 0; transform: translateY(34px) rotate(5deg) scale(.88); filter: blur(5px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Chips, cards, rows and pills pop in one after another */
+.slide.active .chip { animation: chipIn .55s cubic-bezier(.2, 1.6, .4, 1) backwards; }
+@keyframes chipIn { from { opacity: 0; transform: translateX(-40px) scale(.7); } to { opacity: 1; transform: none; } }
+.slide.active .card, .slide.active .tbl tr, .slide.active .pill, .slide.active .sponsor, .slide.active.accent li {
+  animation: popIn .65s cubic-bezier(.2, 1.4, .4, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 95ms + .3s);
+}
+@keyframes popIn { from { opacity: 0; transform: translateY(46px) scale(.9); } to { opacity: 1; transform: none; } }
+.slide.active .ico, .slide.active .card .num { animation: spinIn .8s cubic-bezier(.2, 1.5, .4, 1) backwards; animation-delay: calc(var(--i, 0) * 95ms + .5s); }
+@keyframes spinIn { from { opacity: 0; transform: rotate(-200deg) scale(0); } to { opacity: 1; transform: none; } }
+.slide.active .say { animation: bubble .55s .7s cubic-bezier(.2, 1.7, .4, 1) backwards; transform-origin: right center; }
+@keyframes bubble { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: none; } }
+.slide.active .promo { animation: tada 1s 1.1s cubic-bezier(.2, 1.4, .4, 1) backwards; }
+@keyframes tada {
+  0% { opacity: 0; transform: scale(.6) rotate(-6deg); }
+  50% { opacity: 1; transform: scale(1.06) rotate(2deg); }
+  75% { transform: scale(.98) rotate(-1deg); }
+  100% { transform: none; }
+}
+
+/* Lift on hover, for live presenting */
+.card, .sponsor, .pill { transition: transform .25s ease, box-shadow .25s ease; }
+.card:hover { transform: translateY(-10px) rotate(-.6deg); box-shadow: 0 16px 0 rgba(11, 5, 32, .55), 0 0 60px rgba(255, 153, 0, .35); }
+.sponsor:hover, .pill:hover { transform: translateY(-6px) scale(1.03); }
+
+/* Arrows that keep nudging forward */
+.flow > .card:not(:last-child)::after { animation: nudge 1.3s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { transform: translate(0, -50%); } 50% { transform: translate(9px, -50%); } }
+
+/* Mascots and art follow the mouse a little */
+.mascot, .art, .closing .camp { translate: calc(var(--mx, 0) * 16px) calc(var(--my, 0) * 10px); transition: translate .4s ease-out; }
+
+/* Kiro promo callout */
+.divider .promo {
+  align-self: flex-start; max-width: 940px;
+  font-size: 28px; line-height: 1.35; font-weight: 800; color: var(--ink);
+  background: var(--cream); border: 3px solid var(--orange); border-radius: 24px; padding: 16px 26px;
+  box-shadow: 0 8px 0 rgba(124, 58, 237, .85);
+}
+.divider .promo b { color: #c2410c; }
+
+/* Comparison table */
+.tbl.cmp td { font-size: 26px; vertical-align: top; }
+.tbl.cmp th { font-size: 28px; }
+
+/* Live mini board on the demo slide */
+.accent ol { max-width: 1000px; }
+.term {
+  position: absolute; right: 96px; top: 250px; width: 660px; z-index: 2;
+  background: #140a30; border: 4px solid var(--ink); border-radius: 24px; overflow: hidden;
+  box-shadow: 0 16px 0 rgba(31, 17, 64, .28), 0 36px 90px rgba(31, 17, 64, .4);
+  translate: calc(var(--mx, 0) * 10px) calc(var(--my, 0) * 6px); transition: translate .4s ease-out;
+}
+.slide.active .term { animation: termIn .8s .35s cubic-bezier(.2, 1.3, .4, 1) backwards; }
+@keyframes termIn { from { opacity: 0; transform: translateY(60px) rotate(3deg) scale(.9); } to { opacity: 1; transform: none; } }
+.term-bar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: #24124f; }
+.term-bar i { width: 14px; height: 14px; border-radius: 50%; background: #ff5f57; }
+.term-bar i:nth-child(2) { background: #febc2e; }
+.term-bar i:nth-child(3) { background: #28c840; }
+.term-bar span { margin-left: 10px; font: 600 22px var(--pixel); color: var(--orange-light); }
+.term-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; min-height: 420px; }
+.term-col { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: rgba(52, 28, 112, .55); }
+.term-col h4 { font: 600 21px var(--pixel); color: var(--orange-light); }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.tcard { position: relative; padding: 10px 12px; border-radius: 12px; background: #2a1760; border: 2px solid var(--border); color: var(--text); font-size: 20px; font-weight: 800; line-height: 1.2; }
+.tcard small { display: block; margin-top: 4px; font-size: 16px; font-weight: 700; color: var(--subtle); }
+.tcard .agent { display: none; white-space: nowrap; margin-top: 8px; padding: 3px 10px; border-radius: 999px; font-size: 14px; font-weight: 800; color: var(--ink); background: var(--orange); }
+.tcard.work { border-color: var(--orange); box-shadow: 0 0 22px rgba(255, 153, 0, .55); }
+.tcard.work .agent { display: inline-block; animation: pulse 1.1s ease-in-out infinite; }
+.tcard.done { border-color: #34d399; }
+.tcard.done .tt::before { content: "✓ "; color: #6ee7a0; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* Ambient effects: embers, bats and a pumpkin on the progress bar */
+.fx { position: absolute; inset: 0; width: 1920px; height: 1080px; pointer-events: none; z-index: 3; }
+.bats { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 3; }
+.bat { position: absolute; left: -90px; top: 10%; font-size: 44px; filter: drop-shadow(0 0 10px rgba(185, 140, 255, .7)); animation: fly 15s linear infinite; }
+.bat:nth-child(2) { top: 26%; font-size: 32px; animation-duration: 19s; animation-delay: -7s; }
+.bat:nth-child(3) { top: 6%; font-size: 26px; animation-duration: 23s; animation-delay: -15s; }
+@keyframes fly {
+  0% { transform: translate(0, 0) scaleX(-1); }
+  25% { transform: translate(560px, -50px) scaleX(-1); }
+  50% { transform: translate(1080px, 40px) scaleX(-1); }
+  75% { transform: translate(1580px, -30px) scaleX(-1); }
+  100% { transform: translate(2140px, 10px) scaleX(-1); }
+}
+.progress::after { content: "🎃"; position: absolute; right: -16px; top: -26px; font-size: 30px; }
+
+/* Export and reduced motion: final state, no ambient effects */
+.export *, .export *::before, .export *::after { animation: none !important; transition: none !important; }
+.export .fx, .export .bats { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .fx, .bats { display: none; }
+}
+@media print { .fx, .bats { display: none; } }
+</style>
+</head>
+<body>
+<div class="deck"><div class="stage" id="stage">
+
+<!-- 1 · Cover -->
+<section class="slide cover">
+  <span class="chip">🎃 SpookyThon 2026 · Charla previa</span>
+  <h1>Agentes de IA con <span class="hl">Kiro</span> + <span class="vl">Gentle-AI</span></h1>
+  <p class="tagline">Llega a SpookyThon con ventaja: aprende a trabajar con agentes de IA de forma ordenada, no solo a pedirle código a un chat.</p>
+  <p class="by">Miquel Muñiz Rivas · Domingo 18 de octubre · 19:00 · Virtual</p>
+  <div class="pills">
+    <span class="pill"><b>Organiza</b> · AWS Student Builder Group ULEAM</span>
+    <span class="pill hot"><b>Sede</b> · ULEAM · Manta</span>
+  </div>
+  <aside class="notes">Bienvenida. Presentarme en una frase y agradecer al AWS Student Builder Group ULEAM y a la ULEAM. Recordar que el registro en Meetup es obligatorio para participar en SpookyThon.</aside>
+</section>
+
+<!-- 2 · Agenda -->
+<section class="slide">
+  <span class="chip">👋 Bienvenidos</span>
+  <h2>¿Qué vamos a ver hoy?</h2>
+  <div class="mascot"><p class="say">¡Hola! Hoy armamos un plan juntos.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-3">
+    <div class="card"><span class="ico">🤖</span><h3>¿Qué es un agente de IA?</h3><p>Cómo trabaja y por qué necesita un plan.</p></div>
+    <div class="card"><span class="ico">🧭</span><h3>Kiro: del prompt al spec</h3><p>Specs, steering, hooks, powers, skills y MCP.</p></div>
+    <div class="card violet"><span class="ico">🧙</span><h3>Gentle-AI sobre Kiro</h3><p>ODD, SDD, TDD, RDD y memoria con Engram.</p></div>
+  </div>
+  <p class="lead">Y al final: una demo en vivo y un plan para tus tres días de SpookyThon. 🚀</p>
+  <aside class="notes">Tres bloques cortos y una demo. Las preguntas van al final o por el chat.</aside>
+</section>
+
+<!-- 3 · Problem -->
+<section class="slide statement">
+  <span class="chip">🗺️ El problema</span>
+  <h1>Un prompt suelto no alcanza para <span class="hl">tres días</span></h1>
+  <p class="lead">Improvisar con la IA sale caro: el contexto se pierde, el código crece sin que el equipo lo entienda y la demo se rompe justo antes del pitch.</p>
+  <img class="art" src="assets/spooky-lost.webp" alt="Fantasma perdido mirando un mapa">
+  <aside class="notes">Contar una experiencia propia: pedirle algo a la IA sin contexto y terminar reescribiendo todo. Idea central de la charla: darle al agente un plan y memoria.</aside>
+</section>
+
+<!-- 4 · Agent loop -->
+<section class="slide">
+  <span class="chip">🤖 Conceptos</span>
+  <h2>¿Qué es un agente de IA?</h2>
+  <div class="mascot"><p class="say">No solo respondo. ¡También trabajo!</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="flow">
+    <div class="card"><span class="ico">🎯</span><h3>Objetivo</h3><p>Le cuentas qué resultado quieres.</p></div>
+    <div class="card"><span class="ico">📝</span><h3>Plan</h3><p>Divide el trabajo en pasos.</p></div>
+    <div class="card"><span class="ico">⚡</span><h3>Acción</h3><p>Lee, edita y ejecuta comandos.</p></div>
+    <div class="card violet"><span class="ico">🔍</span><h3>Revisión</h3><p>Comprueba el resultado y repite.</p></div>
+  </div>
+  <p class="lead">Un agente recibe un objetivo y trabaja en ciclo sobre tu repositorio. Mientras mejor <b class="hl">contexto</b> le das, mejor trabaja.</p>
+  <aside class="notes">Diferenciar un chat de un agente: el agente usa herramientas (archivos, terminal, MCP) y repite el ciclo hasta cumplir el objetivo. Sin contexto, el ciclo gira en vacío.</aside>
+</section>
+
+<!-- 5 · Divider: Kiro -->
+<section class="slide divider">
+  <span class="num">1</span>
+  <h1>Kiro</h1>
+  <p>El IDE agéntico de AWS: pasa de un prompt a un plan que el agente puede seguir.</p>
+  <p class="promo">💸 Dato: Kiro lanza promociones de vez en cuando. Ejemplo de esta semana: Kiro Pro por <b>$9,02</b> hasta el 31 de octubre; después, $20 al mes.</p>
+  <img class="art" src="assets/spooky-admin.webp" alt="Fantasma trabajando frente a una laptop con la nube de AWS">
+  <aside class="notes">Transición. Preguntar quién ya instaló Kiro. La promoción es la que apareció en mi cuenta: revisar el precio vigente en kiro.dev antes de la charla, porque puede variar.</aside>
+</section>
+
+<!-- 6 · Kiro modes -->
+<section class="slide">
+  <span class="chip">🧭 Kiro</span>
+  <h2>Dos formas de trabajar</h2>
+  <div class="mascot"><p class="say">Primero juega, después construye.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-2">
+    <div class="card violet"><span class="ico">💬</span><span class="tag">Para explorar</span><h3>Modo Vibe</h3><p>Conversas y el agente escribe el código. Ideal para probar una idea o hacer un cambio pequeño.</p></div>
+    <div class="card"><span class="ico">📐</span><span class="tag">Para construir</span><h3>Modo Spec</h3><p>Primero requisitos, diseño y tareas. Después el agente implementa tarea por tarea.</p></div>
+  </div>
+  <p class="lead">Para SpookyThon: explora en <b class="vl">Vibe</b> y construye en <b class="hl">Spec</b>.</p>
+  <aside class="notes">Mostrar la diferencia entre conversar (Vibe) y trabajar con una especificación (Spec). El spec es lo que evita perder el rumbo en tres días.</aside>
+</section>
+
+<!-- PRD and TRD -->
+<section class="slide">
+  <span class="chip">📄 Antes del spec</span>
+  <h2>Primero el PRD y el TRD</h2>
+  <div class="mascot"><p class="say">Si sé el qué y el cómo, no me pierdo.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="flow">
+    <div class="card"><span class="ico">🎯</span><span class="tag">Documento de producto</span><h3>PRD</h3><p>El <b>qué</b> y el <b>para quién</b>: problema, usuarios, funciones y qué queda fuera.</p></div>
+    <div class="card"><span class="ico">🛠️</span><span class="tag">Documento técnico</span><h3>TRD</h3><p>El <b>cómo</b>: stack, arquitectura, datos, integraciones y límites técnicos.</p></div>
+    <div class="card violet"><span class="ico">📐</span><span class="tag">Plan de trabajo</span><h3>Spec</h3><p>Con los dos listos, el agente arma requisitos, diseño y tareas.</p></div>
+  </div>
+  <p class="lead">Una página de cada uno alcanza para un hackathon. Son el <b class="hl">contexto</b> que el agente necesita para no inventar.</p>
+  <aside class="notes">PRD es Product Requirements Document y TRD es Technical Requirements Document. Mostrar como ejemplo los de Termino, el proyecto de la demo: docs/termino-prd.md y docs/termino-trd.md. Se pueden escribir con ayuda del agente y luego usarlos como entrada del spec o como steering.</aside>
+</section>
+
+<!-- 7 · Spec files -->
+<section class="slide">
+  <span class="chip">📐 Kiro · Specs</span>
+  <h2>Un spec son tres archivos</h2>
+  <div class="mascot"><p class="say">Tú apruebas cada paso.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="flow">
+    <div class="card"><span class="ico">❓</span><span class="tag">El qué</span><h3>requirements.md</h3><p>Historias de usuario y criterios de aceptación en notación EARS.</p></div>
+    <div class="card"><span class="ico">🏗️</span><span class="tag">El cómo</span><h3>design.md</h3><p>Arquitectura, componentes, datos y decisiones técnicas.</p></div>
+    <div class="card violet"><span class="ico">✅</span><span class="tag">El orden</span><h3>tasks.md</h3><p>Tareas pequeñas que el agente ejecuta una por una.</p></div>
+  </div>
+  <p class="lead">Revisas y corriges cada archivo antes de pasar al siguiente.</p>
+  <aside class="notes">Los tres archivos viven en .kiro/specs dentro del repositorio, así que todo el equipo los ve y los versiona. El humano aprueba cada etapa.</aside>
+</section>
+
+<!-- 8 · Kiro toolbox -->
+<section class="slide">
+  <span class="chip">🧰 Kiro</span>
+  <h2>La caja de herramientas</h2>
+  <div class="mascot"><p class="say">¡Con esto ya no trabajo a ciegas!</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-3">
+    <div class="card row"><span class="ico">📌</span><div><h3>Steering</h3><p>Archivos con tu producto, stack y estructura. El agente los lee siempre.</p></div></div>
+    <div class="card row"><span class="ico">🪝</span><div><h3>Hooks</h3><p>Automatizaciones que se disparan con eventos, como guardar un archivo.</p></div></div>
+    <div class="card row"><span class="ico">🔌</span><div><h3>MCP</h3><p>Conecta documentación, bases de datos y APIs externas.</p></div></div>
+    <div class="card row violet"><span class="ico">✨</span><div><h3>Powers</h3><p>Paquetes que suman conocimiento especializado cuando la tarea lo pide.</p></div></div>
+    <div class="card row violet"><span class="ico">🎓</span><div><h3>Agent Skills</h3><p>Instrucciones reutilizables que el agente carga según la tarea.</p></div></div>
+    <div class="card row violet"><span class="ico">🚀</span><div><h3>Autopilot</h3><p>El agente avanza solo, sin pedir aprobación en cada paso.</p></div></div>
+  </div>
+  <aside class="notes">Steering vive en .kiro/steering (product.md, tech.md, structure.md). Hooks: por ejemplo, generar tests al guardar. Powers agrupan herramientas MCP, steering y hooks. Autopilot es cómodo, pero conviene revisar los cambios al final de cada tarea.</aside>
+</section>
+
+<!-- 9 · Divider: Gentle-AI -->
+<section class="slide divider">
+  <span class="num">2</span>
+  <h1>Gentle-AI</h1>
+  <p>El ecosistema que le da al agente método, memoria y revisión.</p>
+  <img class="art" src="assets/spooky-team-party.webp" alt="Fantasmas trabajando en equipo con una laptop">
+  <aside class="notes">Transición. Kiro es la herramienta; Gentle-AI es la forma de trabajar con ella.</aside>
+</section>
+
+<!-- 10 · Gentle-AI overview -->
+<section class="slide">
+  <span class="chip">🧙 Gentle-AI</span>
+  <h2>¿Qué instala Gentle-AI?</h2>
+  <div class="mascot"><p class="say">Todo esto con un solo comando.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-3">
+    <div class="card row"><span class="ico">🌱</span><div><h3>ODD</h3><p>El flujo de todos los días: explorar, anotar tareas e implementar una por una.</p></div></div>
+    <div class="card row"><span class="ico">📜</span><div><h3>SDD</h3><p>Desarrollo guiado por especificaciones, fase por fase.</p></div></div>
+    <div class="card row"><span class="ico">🧪</span><div><h3>TDD</h3><p>Primero el test que falla, después el código que lo pasa.</p></div></div>
+    <div class="card row violet"><span class="ico">🧾</span><div><h3>RDD</h3><p>Cuatro lentes revisan cada cambio antes de entregarlo.</p></div></div>
+    <div class="card row violet"><span class="ico">🧠</span><div><h3>Engram</h3><p>Memoria que sobrevive entre sesiones.</p></div></div>
+    <div class="card row violet"><span class="ico">🎓</span><div><h3>Skills y subagentes</h3><p>Guías reutilizables y un orquestador que reparte el trabajo.</p></div></div>
+  </div>
+  <p>Ejecutas <code>gentle-ai</code>, eliges tu agente (Kiro incluido) y queda todo listo.</p>
+  <aside class="notes">Gentle-AI es un configurador de Gentleman Programming. No reemplaza a Kiro: lo configura. El mismo flujo funciona en otros agentes, así el equipo no depende de una sola herramienta. Las siguientes diapositivas abren cada pieza.</aside>
+</section>
+
+<!-- 12 · SDD + TDD -->
+<section class="slide">
+  <span class="chip">📜 Gentle-AI · SDD y TDD</span>
+  <h2 class="wide">SDD: una fase, un entregable</h2>
+  <div class="grid-4">
+    <div class="card tight"><span class="tag">Fase 1</span><h3>🔎 Explore</h3><p>Investiga el código y compara caminos.</p></div>
+    <div class="card tight"><span class="tag">Fase 2</span><h3>💡 Propose</h3><p>Intención, alcance y enfoque.</p></div>
+    <div class="card tight"><span class="tag">Fase 3</span><h3>📋 Spec</h3><p>Requisitos y escenarios.</p></div>
+    <div class="card tight"><span class="tag">Fase 4</span><h3>🏗️ Design</h3><p>Decisiones de arquitectura.</p></div>
+    <div class="card tight violet"><span class="tag">Fase 5</span><h3>🧩 Tasks</h3><p>Lista ordenada de tareas.</p></div>
+    <div class="card tight violet"><span class="tag">Fase 6</span><h3>⚒️ Apply</h3><p>Escribe el código siguiendo el spec.</p></div>
+    <div class="card tight violet"><span class="tag">Fase 7</span><h3>✅ Verify</h3><p>Compara lo hecho con el spec.</p></div>
+    <div class="card tight violet"><span class="tag">Fase 8</span><h3>📦 Archive</h3><p>Cierra el cambio y guarda el estado.</p></div>
+  </div>
+  <p class="lead"><b class="hl">TDD</b> acompaña cada tarea: 🔴 test que falla → 🟢 código que lo pasa → ✨ limpieza.</p>
+  <aside class="notes">SDD es el camino formal para cambios grandes; cada fase la ejecuta un subagente distinto. Relacionarlo con Kiro: requirements, design y tasks equivalen a las fases spec, design y tasks. TDD: cuando existe un test ejecutable y un resultado esperado claro, primero se ve fallar el test, después se implementa y al final se refactoriza.</aside>
+</section>
+
+<!-- 11 · ODD -->
+<section class="slide">
+  <span class="chip">🌱 Gentle-AI · ODD</span>
+  <h2 class="wide">ODD: Organic Driven Development</h2>
+  <div class="flow small">
+    <div class="card"><span class="num">1</span><h3>Autorizar</h3><p>¿Me pidieron un cambio o solo investigar?</p></div>
+    <div class="card"><span class="num">2</span><h3>Explorar</h3><p>Leer el código antes de proponer.</p></div>
+    <div class="card"><span class="num">3</span><h3>Aclarar</h3><p>Una pregunta a la vez, si hay una duda real.</p></div>
+    <div class="card"><span class="num">4</span><h3>Clasificar</h3><p>¿Trabajo pequeño o grande?</p></div>
+    <div class="card"><span class="num">5</span><h3>Anotar</h3><p>Tareas en <code>odd/tasks</code> antes de escribir.</p></div>
+    <div class="card"><span class="num">6</span><h3>Construir</h3><p>Tarea por tarea, con test primero y un commit.</p></div>
+    <div class="card violet"><span class="num">7</span><h3>Cerrar</h3><p>Contar qué se verificó y qué falta.</p></div>
+  </div>
+  <p class="lead">Lo pequeño se queda pequeño. Lo grande deja una lista de tareas para <b class="hl">retomar el trabajo</b> si la sesión se corta. 💾</p>
+  <aside class="notes">ODD es el flujo que Gentle-AI aplica a cada pedido, sin que lo pidas. El documento de tareas se guarda en odd/tasks y se copia a Engram. Cada tarea cierra con un commit convencional en una rama de feature. El push y el PR siguen siendo decisión humana.</aside>
+</section>
+
+<!-- Compare: Kiro Spec vs Gentle-AI SDD vs ODD -->
+<section class="slide">
+  <span class="chip">⚖️ Comparación</span>
+  <h2 class="wide">Spec, SDD y ODD: ¿cuál uso?</h2>
+  <table class="tbl cmp">
+    <tr><th style="width:19%"></th><th style="width:27%">📐 Spec de Kiro</th><th style="width:27%">📜 SDD de Gentle-AI</th><th style="width:27%">🌱 ODD de Gentle-AI</th></tr>
+    <tr><td>Qué es</td><td>Un modo del IDE de Kiro</td><td>Un flujo formal de 8 fases</td><td>El flujo por defecto, liviano</td></tr>
+    <tr><td>Qué deja</td><td>requirements, design y tasks</td><td>Propuesta, spec, diseño, tareas y verificación</td><td>Una lista de tareas en odd/tasks</td></tr>
+    <tr><td>Quién trabaja</td><td>El agente de Kiro; tú apruebas cada archivo</td><td>Un subagente por fase</td><td>El orquestador; delega solo lo grande</td></tr>
+    <tr><td>Cuándo usarlo</td><td>Features dentro de Kiro</td><td>Cambios grandes que piden trazabilidad</td><td>El día a día: arreglos y cambios medianos</td></tr>
+  </table>
+  <p class="lead">No compiten: <b class="hl">ODD</b> para el día a día, <b class="hl">SDD</b> para lo grande y el <b class="hl">Spec</b> cuando trabajas dentro de Kiro.</p>
+  <aside class="notes">Remarcar que los tres comparten la misma idea: planear antes de escribir código. El Spec de Kiro vive en .kiro/specs; SDD agrega exploración y propuesta antes, y verificación y archivo después; ODD es lo que Gentle-AI hace siempre, sin que lo pidas, y solo crea un documento de tareas cuando el trabajo es grande.</aside>
+</section>
+
+<!-- 13 · Memory and skills -->
+<section class="slide">
+  <span class="chip">🧠 Gentle-AI · Memoria</span>
+  <h2>El contexto que no se pierde</h2>
+  <div class="mascot"><p class="say">¡Me acuerdo de lo que hicimos ayer!</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-3">
+    <div class="card"><span class="ico">🧠</span><span class="tag">Memoria</span><h3>Engram</h3><p>Guarda decisiones, bugs y hallazgos. La siguiente sesión empieza sabiendo qué pasó en la anterior.</p></div>
+    <div class="card"><span class="ico">🎓</span><span class="tag">Conocimiento</span><h3>Skills</h3><p>Guías reutilizables en un registro. El agente carga solo las que la tarea necesita.</p></div>
+    <div class="card violet"><span class="ico">🕸️</span><span class="tag">Mapa del código</span><h3>CodeGraph</h3><p>Un grafo del repositorio: símbolos, llamadas y qué se rompe si cambias algo.</p></div>
+  </div>
+  <p class="lead">En un equipo de tres, nadie tiene que explicarle lo mismo al agente <b class="hl">en cada sesión</b>.</p>
+  <aside class="notes">Engram sobrevive entre sesiones y también cuando el contexto se compacta. Las skills son archivos SKILL.md; el registro vive en .atl/skill-registry.md. CodeGraph responde preguntas de estructura sin leer archivo por archivo.</aside>
+</section>
+
+<!-- 14 · RDD -->
+<section class="slide">
+  <span class="chip">🧾 Gentle-AI · RDD</span>
+  <h2>Cuatro lentes antes de entregar</h2>
+  <div class="mascot"><p class="say">Cuatro miradas ven más que una.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="grid-4">
+    <div class="card tight"><span class="ico">🛡️</span><h3>Riesgo</h3><p>Seguridad, permisos y datos expuestos.</p></div>
+    <div class="card tight"><span class="ico">📖</span><h3>Legibilidad</h3><p>Nombres claros y código simple.</p></div>
+    <div class="card tight violet"><span class="ico">🧪</span><h3>Fiabilidad</h3><p>Tests, casos límite y regresiones.</p></div>
+    <div class="card tight violet"><span class="ico">🌧️</span><h3>Resiliencia</h3><p>Qué pasa cuando algo falla.</p></div>
+  </div>
+  <p class="lead">La revisión pide tu permiso en cada cambio y admite <b class="hl">una sola corrección</b>. Tú decides cuándo se entrega.</p>
+  <p>¿Una decisión difícil? <b>Judgment Day</b>: dos jueces revisan a ciegas y solo se aplica lo que ambos confirman. ⚖️</p>
+  <aside class="notes">RDD es receipt-driven development: el usuario lo activa o desactiva con gentle-ai review mode. Aclarar con honestidad que la revisión nativa hoy corre en Claude Code, Codex, OpenCode y Pi; en Kiro se aprovecha el resto del ecosistema. La revisión es informativa: commit, push y PR siguen siendo decisión humana.</aside>
+</section>
+
+<!-- 15 · Together -->
+<section class="slide">
+  <span class="chip">🤝 Kiro + Gentle-AI</span>
+  <h2>¿Cómo trabajan juntos?</h2>
+  <table class="tbl">
+    <tr><th style="width:25%">Momento</th><th style="width:37%">🧭 Kiro</th><th style="width:38%">🧙 Gentle-AI</th></tr>
+    <tr><td>Antes de programar</td><td>Spec: requisitos, diseño y tareas</td><td>ODD explora y anota las tareas</td></tr>
+    <tr><td>Mientras construyes</td><td>Ejecuta tareas y dispara hooks</td><td>TDD, skills y subagentes</td></tr>
+    <tr><td>Entre sesiones</td><td>Steering con el contexto fijo</td><td>Engram recuerda las decisiones</td></tr>
+    <tr><td>Antes de entregar</td><td>Revisas el cambio de cada tarea</td><td>Verifica contra el spec</td></tr>
+  </table>
+  <p class="lead">Kiro pone el IDE y el spec. Gentle-AI pone el método, la memoria y la disciplina.</p>
+  <aside class="notes">Leer la tabla por filas, siguiendo el recorrido de un equipo durante el hackathon.</aside>
+</section>
+
+<!-- 16 · Demo -->
+<section class="slide accent">
+  <span class="chip">🎬 Demo en vivo</span>
+  <h1>Construyamos <span style="white-space:nowrap">Termino</span></h1>
+  <p class="lead" style="color:var(--ink);max-width:1000px">El tablero donde ves trabajar a tu agente: Kanban o Scrum en la terminal, hecho en Go, conectado por MCP y con un widget al abrir la terminal.</p>
+  <ol>
+    <li>Instalar Gentle-AI y elegir Kiro como agente.</li>
+    <li>Partir del PRD y el TRD y generar el spec.</li>
+    <li>Ejecutar las tareas y ver cómo avanzan.</li>
+  </ol>
+  <div class="term" aria-label="Simulación del tablero de Termino con tarjetas que avanzan solas">
+    <div class="term-bar"><i></i><i></i><i></i><span>termino · TER</span></div>
+    <div class="term-cols">
+      <div class="term-col"><h4>Por hacer</h4><div class="stack" data-col="0">
+        <div class="tcard" data-id="3"><span class="tt">Servidor MCP</span><small>TER-3</small><span class="agent">🤖 Kiro trabajando</span></div>
+        <div class="tcard" data-id="4"><span class="tt">Widget</span><small>TER-4</small><span class="agent">🤖 Kiro trabajando</span></div>
+      </div></div>
+      <div class="term-col"><h4>En progreso</h4><div class="stack" data-col="1">
+        <div class="tcard work" data-id="2"><span class="tt">Tablero en la TUI</span><small>TER-2</small><span class="agent">🤖 Kiro trabajando</span></div>
+      </div></div>
+      <div class="term-col"><h4>Hecho</h4><div class="stack" data-col="2">
+        <div class="tcard done" data-id="1"><span class="tt">Esquema SQLite</span><small>TER-1</small><span class="agent">🤖 Kiro trabajando</span></div>
+      </div></div>
+    </div>
+  </div>
+  <aside class="notes">Tener el entorno ya abierto y una grabación de respaldo por si falla la conexión. Termino es un tablero de tareas en la terminal (TUI) escrito en Go, con Clean Architecture por feature, servidor MCP y widgets para Linux. Abrir docs/termino-prd.md y docs/termino-trd.md, narrar cada paso en voz alta y mostrar los archivos del spec que genera Kiro.</aside>
+</section>
+
+<!-- 17 · Plan -->
+<section class="slide">
+  <span class="chip">🎃 SpookyThon 2026</span>
+  <h2>Tu plan para los tres días</h2>
+  <div class="mascot"><p class="say">Trae tu laptop con Kiro instalado.</p><img src="assets/spookython-ghost.png" alt=""></div>
+  <div class="flow">
+    <div class="card"><span class="ico">📐</span><span class="tag">Lunes 26 de octubre</span><h3>Día 1: PRD, TRD y spec</h3><p>Los retos salen a las 10:00. Define el qué y el cómo antes de escribir código.</p></div>
+    <div class="card"><span class="ico">⚒️</span><span class="tag">Martes 27 de octubre</span><h3>Día 2: construcción</h3><p>Una tarea a la vez, y cada avance en un commit.</p></div>
+    <div class="card violet"><span class="ico">✨</span><span class="tag">Miércoles 28 de octubre</span><h3>Día 3: pulir y pitch</h3><p>Prueba la demo completa y ensaya tu pitch de 5 minutos.</p></div>
+  </div>
+  <p class="lead">🎤 <b class="hl">Pitch presencial:</b> viernes 30 de octubre en la ULEAM, Manta.</p>
+  <aside class="notes">El desarrollo es virtual del 26 al 28 de octubre y los proyectos empiezan desde cero. Recomendar que dejen instalados Kiro y Gentle-AI antes del lunes para no perder la primera mañana.</aside>
+</section>
+
+<!-- 18 · Next -->
+<section class="slide">
+  <span class="chip">📅 SpookyThon 2026</span>
+  <h2>¿Qué sigue?</h2>
+  <table class="tbl">
+    <tr><th style="width:22%">Fecha</th><th>Qué pasa</th></tr>
+    <tr><td>12 – 25 oct</td><td>📝 Registro de equipos en la web, de 1 a 3 integrantes</td></tr>
+    <tr><td>Mié 21 oct</td><td>🔐 Charla: Shift-left con IA · Willie Reyes</td></tr>
+    <tr><td>26 – 28 oct</td><td>💻 Desarrollo virtual</td></tr>
+    <tr><td>Vie 30 oct</td><td>🎤 Pitch presencial en la ULEAM, Manta</td></tr>
+  </table>
+  <p class="lead"><b class="hl">Regístrate:</b> spookython-three.vercel.app · El registro en Meetup es obligatorio.</p>
+  <aside class="notes">Las charlas son a las 19:00, virtuales, por Meetup. Recordar el grupo oficial de WhatsApp y que la participación es gratuita para estudiantes de cualquier universidad de Ecuador.</aside>
+</section>
+
+<!-- 19 · Thanks -->
+<section class="slide closing">
+  <span class="chip">💜 Gracias</span>
+  <h2>¡Gracias a nuestros sponsors!</h2>
+  <div class="sponsors">
+    <div class="sponsor">Trillion Quest</div>
+    <div class="sponsor"><img src="assets/misa.png" alt="Logo de Misa">Misa</div>
+    <div class="sponsor">Inbox</div>
+  </div>
+  <div class="pills">
+    <span class="pill"><b>Organiza</b> · AWS Student Builder Group ULEAM</span>
+    <span class="pill hot"><b>Sede</b> · ULEAM · Manta</span>
+  </div>
+  <img class="camp" src="assets/spookython-campfire.webp" alt="Fantasmas alrededor de una fogata">
+  <aside class="notes">Agradecer por nombre a Trillion Quest, Misa e Inbox, y a la ULEAM y al AWS Student Builder Group ULEAM. Abrir la ronda de preguntas.</aside>
+</section>
+
+<div class="bats" aria-hidden="true"><span class="bat">🦇</span><span class="bat">🦇</span><span class="bat">🦇</span></div>
+<canvas class="fx" id="fx" width="1920" height="1080" aria-hidden="true"></canvas>
+</div></div>
+<div class="progress" id="progress"></div>
+<div class="hint">← → navegar · N notas · F pantalla completa</div>
+
+<script>
+// Edit organizers and sponsors here; every slide footer reads from this object.
+const BRAND = {
+  event: "SpookyThon 2026",
+  organizers: ["AWS Student Builder Group ULEAM", "ULEAM"],
+  sponsors: ["Trillion Quest", "Misa", "Inbox"],
+  mascot: "assets/spookython-ghost.png",
+};
+
+const stage = document.getElementById("stage");
+const slides = [...document.querySelectorAll(".slide")];
+const progress = document.getElementById("progress");
+const pad = (n) => String(n).padStart(2, "0");
+
+// ?export renders every slide in its final state (used for the PDF and PPTX).
+const exporting = new URLSearchParams(location.search).has("export");
+if (exporting) document.body.classList.add("export");
+const motion = !exporting && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Wrap each word of the titles so they can arrive one by one.
+function splitWords(el) {
+  let n = 0;
+  const walk = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === Node.ELEMENT_NODE) return walk(child);
+      if (child.nodeType !== Node.TEXT_NODE) return;
+      const frag = document.createDocumentFragment();
+      child.textContent.split(/(\s+)/).forEach((part) => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) return frag.append(part);
+        const word = document.createElement("span");
+        word.className = "w";
+        word.style.setProperty("--w", n++);
+        word.textContent = part;
+        frag.append(word);
+      });
+      child.replaceWith(frag);
+    });
+  };
+  walk(el);
+}
+document.querySelectorAll(".slide h1, .slide h2").forEach(splitWords);
+
+// Stagger order for cards, table rows, pills and list items inside each slide.
+slides.forEach((slide) => {
+  slide.querySelectorAll(".card, .tbl tr, .pill, .sponsor, li").forEach((el, i) => el.style.setProperty("--i", i));
+});
+
+slides.forEach((slide, i) => {
+  const foot = document.createElement("div");
+  foot.className = "foot";
+  foot.innerHTML =
+    `<span class="brand"><img src="${BRAND.mascot}" alt=""><b>${BRAND.event}</b> · ${BRAND.organizers.join(" · ")}</span>` +
+    `<span class="right">Sponsors ${BRAND.sponsors.map((s) => `<span class="sp">${s}</span>`).join("")}` +
+    `<span class="count">${pad(i + 1)} / ${pad(slides.length)}</span></span>`;
+  slide.appendChild(foot);
+});
+
+let current = 0;
+function show(index) {
+  current = Math.max(0, Math.min(slides.length - 1, index));
+  slides.forEach((s, i) => s.classList.toggle("active", i === current));
+  progress.style.width = `${((current + 1) / slides.length) * 100}%`;
+  history.replaceState(null, "", `#${current + 1}`);
+  const slide = slides[current];
+  if (slide.querySelector(".term")) startBoard(slide.querySelector(".term"));
+  else stopBoard();
+  if (slide.classList.contains("closing")) setTimeout(() => burst(960, 560, 160), 500);
+}
+
+// ---------- Live mini board: Kiro moves the cards on its own ----------
+let boardTimers = [];
+function stopBoard() { boardTimers.forEach(clearTimeout); boardTimers = []; }
+function scaleNow() { return parseFloat(getComputedStyle(stage).getPropertyValue("--scale")) || 1; }
+function moveCard(card, stack) {
+  const first = card.getBoundingClientRect();
+  stack.appendChild(card);
+  const last = card.getBoundingClientRect();
+  const s = scaleNow();
+  card.animate(
+    [{ transform: `translate(${(first.left - last.left) / s}px, ${(first.top - last.top) / s}px) rotate(-4deg) scale(1.06)` }, { transform: "none" }],
+    { duration: 650, easing: "cubic-bezier(.2, 1.2, .4, 1)" },
+  );
+}
+function startBoard(term) {
+  stopBoard();
+  if (!motion) return;
+  const stacks = [...term.querySelectorAll(".stack")];
+  const cards = [...term.querySelectorAll(".tcard")].sort((a, b) => a.dataset.id - b.dataset.id);
+  const later = (fn, ms) => boardTimers.push(setTimeout(fn, ms));
+  const reset = () => {
+    cards.forEach((c) => { c.classList.remove("work", "done"); stacks[0].appendChild(c); });
+    later(step, 1200);
+  };
+  const step = () => {
+    const working = stacks[1].querySelector(".tcard");
+    if (working) {
+      working.classList.remove("work");
+      working.classList.add("done");
+      moveCard(working, stacks[2]);
+      const r = working.getBoundingClientRect(), st = stage.getBoundingClientRect(), s = scaleNow();
+      burst((r.left - st.left + r.width / 2) / s, (r.top - st.top) / s, 40);
+    }
+    later(() => {
+      const next = stacks[0].querySelector(".tcard");
+      if (next) {
+        next.classList.add("work");
+        moveCard(next, stacks[1]);
+        later(step, 1900);
+      } else {
+        later(reset, 2600);
+      }
+    }, 700);
+  };
+  reset();
+}
+
+// ---------- Ambient canvas: rising pixel embers and confetti bursts ----------
+const fx = document.getElementById("fx");
+const ctx = fx.getContext("2d");
+const EMBER_COLORS = ["255, 170, 60", "185, 140, 255", "255, 246, 230"];
+const CONFETTI_COLORS = ["#ff9900", "#ffc266", "#b98cff", "#7c3aed", "#fff6e6", "#34d399"];
+const newEmber = (anywhere) => ({
+  x: Math.random() * 1920, y: anywhere ? Math.random() * 1080 : 1100,
+  size: 3 + Math.random() * 5, speed: .25 + Math.random() * .75, phase: Math.random() * 6.28,
+  color: EMBER_COLORS[(Math.random() * EMBER_COLORS.length) | 0],
+});
+const embers = Array.from({ length: 42 }, () => newEmber(true));
+let confetti = [];
+function burst(x, y, count) {
+  if (!motion) return;
+  for (let i = 0; i < count; i++) {
+    confetti.push({
+      x, y, vx: (Math.random() - .5) * 18, vy: -Math.random() * 17 - 5,
+      size: 8 + Math.random() * 10, rot: Math.random() * 6.28, spin: (Math.random() - .5) * .35,
+      color: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0], life: 140,
+    });
+  }
+}
+function frame(t) {
+  ctx.clearRect(0, 0, 1920, 1080);
+  embers.forEach((e, i) => {
+    e.y -= e.speed;
+    e.x += Math.sin(t / 1400 + e.phase) * .45;
+    if (e.y < -20) embers[i] = newEmber(false);
+    ctx.fillStyle = `rgba(${e.color}, ${.3 + .3 * Math.sin(t / 480 + e.phase)})`;
+    ctx.fillRect(e.x, e.y, e.size, e.size);
+  });
+  confetti = confetti.filter((p) => p.life-- > 0);
+  confetti.forEach((p) => {
+    p.vy += .5; p.vx *= .985; p.x += p.vx; p.y += p.vy; p.rot += p.spin;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.globalAlpha = Math.min(1, p.life / 40);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+    ctx.restore();
+  });
+  requestAnimationFrame(frame);
+}
+if (motion) requestAnimationFrame(frame);
+
+// Mascots and art drift slightly toward the mouse.
+stage.addEventListener("mousemove", (e) => {
+  if (!motion) return;
+  const r = stage.getBoundingClientRect();
+  stage.style.setProperty("--mx", ((e.clientX - r.left) / r.width - .5) * 2);
+  stage.style.setProperty("--my", ((e.clientY - r.top) / r.height - .5) * 2);
+});
+function fit() {
+  const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  stage.style.setProperty("--scale", scale);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); show(current + 1); }
+  else if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); show(current - 1); }
+  else if (e.key === "Home") show(0);
+  else if (e.key === "End") show(slides.length - 1);
+  else if (e.key.toLowerCase() === "n") document.body.classList.toggle("show-notes");
+  else if (e.key.toLowerCase() === "f") {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  }
+});
+stage.addEventListener("click", (e) => {
+  const { left, width } = stage.getBoundingClientRect();
+  show(current + (e.clientX - left < width * 0.3 ? -1 : 1));
+});
+window.addEventListener("resize", fit);
+
+fit();
+show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+</body>
+</html>
