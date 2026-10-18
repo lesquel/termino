@@ -22,6 +22,17 @@ type WidgetToggler interface {
 	Uninstall() (string, error)
 }
 
+// ShareToggler shares the current project through its git repository or
+// stops sharing it; it is the same use case as `termino share init/off`.
+type ShareToggler interface {
+	// ShareRoot returns the repository the project is shared from, or "".
+	ShareRoot(projectID string) (string, error)
+	// EnableShare shares the project from the git repository of the working
+	// directory and returns that repository's root.
+	EnableShare(projectID string) (string, error)
+	DisableShare(projectID string) error
+}
+
 // SettingsDeps feeds the settings screen. Zero values fall back to the
 // built-in themes, the theme loader and config.Load/Save; a nil Widget
 // shows the widget row as unavailable.
@@ -30,7 +41,8 @@ type SettingsDeps struct {
 	LoadTheme  func(name string) (*tuikit.Theme, error)
 	SaveConfig func(mutate func(*config.Config)) error
 	Widget     WidgetToggler
-	Home       string // shortens paths under it to "~"
+	Share      ShareToggler // nil shows the share row as unavailable
+	Home       string       // shortens paths under it to "~"
 }
 
 // SettingsClosedMsg asks the root to leave the settings screen.
@@ -42,17 +54,20 @@ type MotionChangedMsg struct{ On bool }
 // SettingsModel is the settings screen: theme (with live preview), shell
 // widget and motion. It owns every key while open.
 type SettingsModel struct {
-	theme   *tuikit.Theme // the running theme, shared with every screen
-	deps    SettingsDeps
-	project string
-	key     string
+	theme     *tuikit.Theme // the running theme, shared with every screen
+	deps      SettingsDeps
+	project   string
+	key       string
+	projectID string
 
 	current string // active theme name
 	motion  bool
 	widget  setupapp.WidgetStatus
 	wErr    string
+	share   string // share root, "" when not shared
+	sErr    string
 
-	cursor    int // themes first, then the widget row, then motion
+	cursor    int // themes first, then the widget row, motion, then sharing
 	status    string
 	statusErr bool
 	width     int
@@ -92,6 +107,26 @@ func NewSettingsModel(theme *tuikit.Theme, cfg *config.Config, deps SettingsDeps
 	return m
 }
 
+// forProject returns the screen bound to the project the share row toggles.
+func (m SettingsModel) forProject(projectID string) SettingsModel {
+	m.projectID = projectID
+	m.refreshShare()
+	return m
+}
+
+func (m *SettingsModel) refreshShare() {
+	m.sErr, m.share = "", ""
+	if m.deps.Share == nil || m.projectID == "" {
+		m.sErr = "unavailable"
+		return
+	}
+	root, err := m.deps.Share.ShareRoot(m.projectID)
+	if err != nil {
+		m.sErr = err.Error()
+	}
+	m.share = root
+}
+
 // saveConfig applies mutate to the config on disk, so settings changed
 // elsewhere (e.g. the current project) are kept.
 func saveConfig(mutate func(*config.Config)) error {
@@ -119,6 +154,7 @@ func (m *SettingsModel) refreshWidget() {
 
 func (m SettingsModel) widgetRow() int { return len(m.deps.Themes) }
 func (m SettingsModel) motionRow() int { return len(m.deps.Themes) + 1 }
+func (m SettingsModel) shareRow() int  { return len(m.deps.Themes) + 2 }
 
 // Init implements tea.Model.
 func (m SettingsModel) Init() tea.Cmd { return nil }
@@ -137,7 +173,7 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "down", "j":
-			if m.cursor < m.motionRow() {
+			if m.cursor < m.shareRow() {
 				m.cursor++
 			}
 		case "enter", " ":
@@ -154,6 +190,8 @@ func (m SettingsModel) activate() (tea.Model, tea.Cmd) {
 		m.applyTheme(m.deps.Themes[m.cursor])
 	case m.cursor == m.widgetRow():
 		m.toggleWidget()
+	case m.cursor == m.shareRow():
+		m.toggleShare()
 	default:
 		on := !m.motion
 		if err := m.deps.SaveConfig(func(c *config.Config) { c.Motion = on }); err != nil {
@@ -207,6 +245,28 @@ func (m *SettingsModel) toggleWidget() {
 		}
 	}
 	m.refreshWidget()
+}
+
+func (m *SettingsModel) toggleShare() {
+	if m.deps.Share == nil || m.projectID == "" {
+		m.fail("sharing unavailable")
+		return
+	}
+	if m.share != "" {
+		if err := m.deps.Share.DisableShare(m.projectID); err != nil {
+			m.fail(err.Error())
+		} else {
+			m.ok("Sharing off — the files stay in " + m.short(m.share))
+		}
+	} else {
+		root, err := m.deps.Share.EnableShare(m.projectID)
+		if err != nil {
+			m.fail(err.Error())
+		} else {
+			m.ok("Sharing through " + m.short(root) + "/.termino — commit it to share the board")
+		}
+	}
+	m.refreshShare()
 }
 
 func (m *SettingsModel) ok(s string)   { m.status, m.statusErr = "✓ "+s, false }
@@ -318,6 +378,13 @@ func (m SettingsModel) View() string {
 	default:
 		widgetState, widgetInfo = "—", m.widget.Shell.Name+": not supported yet"
 	}
+	shareState, shareInfo := onOffLabel(m.share != ""), "enter shares from this git repository"
+	switch {
+	case m.sErr != "":
+		shareState, shareInfo = "—", m.sErr
+	case m.share != "":
+		shareInfo = m.short(m.share)
+	}
 	motionInfo := ""
 	if m.motion && os.Getenv("NO_COLOR") != "" {
 		motionInfo = "off while NO_COLOR is set"
@@ -330,6 +397,7 @@ func (m SettingsModel) View() string {
 		"",
 		row(m.widgetRow(), label("Shell widget")+widgetState)+"  "+muted.Render(widgetInfo),
 		row(m.motionRow(), label("Motion")+onOffLabel(m.motion))+"  "+muted.Render(motionInfo),
+		row(m.shareRow(), label("Share via repo")+shareState)+"  "+muted.Render(shareInfo),
 	)
 	if m.status != "" {
 		body = append(body, "")

@@ -35,19 +35,29 @@ func topLevel(cmd *cobra.Command) string {
 	return cmd.Name()
 }
 
-// syncSharedOnStart imports the current project's shared files before a
-// command runs, so every command (read-only ones and `mcp --read-only`
-// included: import writes only the local database) sees what teammates
-// pushed. Failures are logged, never printed: stdout may be the MCP channel.
-func syncSharedOnStart(cmd *cobra.Command) {
-	if noShareSync[topLevel(cmd)] {
-		return
+// syncSharedOnStart runs before every command. In a git repository whose
+// .termino/ holds a shared board it first adopts that board (a fresh clone
+// gets the project), then it imports the current project's shared files, so
+// every command (read-only ones and `mcp --read-only` included: import
+// writes only the local database) sees what teammates pushed. Import
+// failures are logged, never printed: stdout may be the MCP channel. The
+// only error returned is a board whose key is shared from another
+// repository; `termino share` commands still run so it can be fixed.
+func syncSharedOnStart(cmd *cobra.Command) error {
+	top := topLevel(cmd)
+	if noShareSync[top] {
+		return nil
+	}
+	ctx := context.Background()
+	if err := adoptSharedRepo(ctx); err != nil && top != "share" {
+		return err
 	}
 	projectID, err := currentProjectID()
 	if err != nil {
-		return
+		return nil
 	}
-	importShared(context.Background(), projectID)
+	importShared(ctx, projectID)
+	return nil
 }
 
 // importShared imports a shared project, logging the outcome. A project

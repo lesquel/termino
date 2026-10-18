@@ -48,9 +48,30 @@ func (w *fakeWidget) Uninstall() (string, error) {
 	return w.rc, nil
 }
 
+// fakeShare records share toggles instead of touching a repository.
+type fakeShare struct {
+	root  string
+	calls []string
+}
+
+func (s *fakeShare) ShareRoot(projectID string) (string, error) { return s.root, nil }
+
+func (s *fakeShare) EnableShare(projectID string) (string, error) {
+	s.calls = append(s.calls, "enable "+projectID)
+	s.root = "/home/u/repo"
+	return s.root, nil
+}
+
+func (s *fakeShare) DisableShare(projectID string) error {
+	s.calls = append(s.calls, "disable "+projectID)
+	s.root = ""
+	return nil
+}
+
 type settingsFixture struct {
 	m      tea.Model
 	deps   apptui.RootDeps
+	share  *fakeShare
 	widget *fakeWidget
 	saved  config.Config
 	saves  int
@@ -63,7 +84,7 @@ func newSettingsRoot(t *testing.T, shell setupapp.ShellInfo) *settingsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &settingsFixture{widget: &fakeWidget{shell: shell, rc: "/home/u/.bashrc"}}
+	f := &settingsFixture{widget: &fakeWidget{shell: shell, rc: "/home/u/.bashrc"}, share: &fakeShare{}}
 	f.saved = config.Config{Theme: "default", Motion: true}
 	f.deps = apptui.RootDeps{
 		Config:  &config.Config{CurrentProjectID: "p1", Theme: "default", Motion: true},
@@ -78,6 +99,7 @@ func newSettingsRoot(t *testing.T, shell setupapp.ShellInfo) *settingsFixture {
 				return nil
 			},
 			Widget: f.widget,
+			Share:  f.share,
 			Home:   "/home/u",
 		},
 	}
@@ -200,5 +222,24 @@ func TestBoardFooterAndHelpListSettings(t *testing.T) {
 	f.press(t, "?")
 	if !strings.Contains(f.view(), "settings") {
 		t.Errorf("help overlay lacks settings:\n%s", f.view())
+	}
+}
+
+func TestSettingsShareToggle(t *testing.T) {
+	f := newSettingsRoot(t, setupapp.ShellInfo{Name: "bash", Supported: true})
+	f.press(t, "s")
+	if v := f.view(); !strings.Contains(v, "Share via repo") || !strings.Contains(v, "Off") {
+		t.Fatalf("settings lack the share row:\n%s", v)
+	}
+	f.press(t, "down", "down", "down", "down", "down", "enter")
+	if len(f.share.calls) != 1 || f.share.calls[0] != "enable p1" {
+		t.Fatalf("share calls = %v", f.share.calls)
+	}
+	if v := f.view(); !strings.Contains(v, "✓ Sharing through ~/repo/.termino") || !strings.Contains(v, "~/repo") {
+		t.Fatalf("no share confirmation:\n%s", v)
+	}
+	f.press(t, "enter")
+	if len(f.share.calls) != 2 || f.share.calls[1] != "disable p1" || !strings.Contains(f.view(), "✓ Sharing off") {
+		t.Fatalf("disable not confirmed (calls %v):\n%s", f.share.calls, f.view())
 	}
 }

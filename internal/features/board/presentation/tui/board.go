@@ -789,8 +789,16 @@ func (m BoardModel) header() string {
 	return m.fit(out)
 }
 
-// statusRow is always one line: the celebration, the last status, an
-// empty-state hint, or a blank line.
+// shareWarning is the repository-sharing warning (skipped files), or "".
+func (m BoardModel) shareWarning() string {
+	if m.svc.ShareWarning == nil {
+		return ""
+	}
+	return sanitize.Line(m.svc.ShareWarning())
+}
+
+// statusRow is always one line: the celebration, the last status, a
+// repository-sharing warning, an empty-state hint, or a blank line.
 func (m BoardModel) statusRow() string {
 	var line string
 	switch {
@@ -805,6 +813,8 @@ func (m BoardModel) statusRow() string {
 			fg = m.theme.Danger
 		}
 		line = lipgloss.NewStyle().Foreground(fg).Render(m.status)
+	case m.shareWarning() != "":
+		line = lipgloss.NewStyle().Foreground(m.theme.Warning).Render(m.shareWarning())
 	case m.visibleCount() == 0 && len(m.board.Columns) > 0:
 		hint := "No tasks yet — press n to create one"
 		if !m.filter.Empty() {

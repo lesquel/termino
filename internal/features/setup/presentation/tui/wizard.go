@@ -5,6 +5,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -33,12 +34,33 @@ const (
 	stepAssoc
 	stepTheme
 	stepWidget
+	stepShare // only inside a git repository
 	stepSummary
 	stepDone
 )
 
-// totalSteps counts the numbered steps, stepName through stepSummary.
-const totalSteps = int(stepSummary-stepName) + 1
+// totalSteps counts the numbered steps, stepName through stepSummary; the
+// share step only counts inside a git repository.
+func (m Model) totalSteps() int {
+	n := int(stepSummary-stepName) + 1
+	if !m.offerShare() {
+		n--
+	}
+	return n
+}
+
+// stepNumber is the 1-based number of the current step.
+func (m Model) stepNumber() int {
+	n := int(m.step-stepName) + 1
+	if !m.offerShare() && m.step > stepShare {
+		n--
+	}
+	return n
+}
+
+// offerShare reports whether the share step is shown: the working directory
+// is inside a git repository.
+func (m Model) offerShare() bool { return m.state.ShareRoot != "" }
 
 // modeOptions are the re-run choices, in display order.
 var modeOptions = []string{"Edit current setup", "Add another project", "Cancel"}
@@ -77,6 +99,7 @@ type Model struct {
 	themeCursor  int
 	assoc        bool
 	widget       bool
+	share        bool
 
 	problem  string // live validation message for the current step
 	applyErr string
@@ -149,6 +172,7 @@ func (m *Model) reset(mode setupapp.Mode) {
 	}
 	m.assoc = m.in.Associate
 	m.widget = m.in.InstallWidget && m.state.Shell.Supported
+	m.share = m.in.Share
 }
 
 // Cancelled reports whether the user left without applying anything.
@@ -174,6 +198,7 @@ func (m Model) Input() setupapp.SetupInput {
 		in.Theme = m.state.Themes[m.themeCursor]
 	}
 	in.InstallWidget = m.widget && m.state.Shell.Supported
+	in.Share = m.share && m.offerShare()
 	return in
 }
 
@@ -290,6 +315,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.state.Shell.Supported {
 			m.widget = toggle(k, m.widget)
 		}
+	case stepShare:
+		m.share = toggle(k, m.share)
 	case stepSummary:
 		if k == "enter" {
 			m.applying = true
@@ -340,6 +367,9 @@ func (m Model) next() (tea.Model, tea.Cmd) {
 	}
 	m.problem = ""
 	m.step++
+	if m.step == stepShare && !m.offerShare() {
+		m.step++
+	}
 	return m, nil
 }
 
@@ -358,6 +388,9 @@ func (m Model) back() (tea.Model, tea.Cmd) {
 		}
 	default:
 		m.step--
+		if m.step == stepShare && !m.offerShare() {
+			m.step--
+		}
 		if m.step == stepKey && m.in.Mode == setupapp.ModeCreate {
 			m.problem = keyProblem(m.key.Value(), m.state.ExistingKeys)
 		}
@@ -429,7 +462,7 @@ func (m Model) View() string {
 	var b strings.Builder
 	head := accent.Render("termino setup")
 	if m.step >= stepName && m.step <= stepSummary {
-		progress := fmt.Sprintf("Step %d of %d", int(m.step-stepName)+1, totalSteps)
+		progress := fmt.Sprintf("Step %d of %d", m.stepNumber(), m.totalSteps())
 		gap := cw - lipgloss.Width(head) - len(progress)
 		if gap < 1 {
 			gap = 1
@@ -543,6 +576,13 @@ func (m Model) content(cw int) (string, string, string, string) {
 			help += " Already installed."
 		}
 		return "Install the shell widget?", help, m.yesNo("Yes", "No", m.widget), keysYesNo
+	case stepShare:
+		help := "Keeps the board in plain-text files under .termino/ so teammates who pull the repository see it. Termino never commits or pushes."
+		if edit && m.state.Current != nil && m.state.Current.ShareRoot != "" {
+			help = "Already shared from " + m.state.Current.ShareRoot + ". Choosing No keeps it shared; `termino share off` stops it."
+		}
+		return "Share this board with the repo?", help,
+			para.Render(filepath.Join(m.state.ShareRoot, ".termino")) + "\n\n" + m.yesNo("Yes", "No", m.share), keysYesNo
 	case stepSummary:
 		return "Review your setup", "Nothing has been written yet.", m.summary(cw), keysSummary
 	default:
@@ -671,6 +711,13 @@ func (m Model) summary(cw int) string {
 		{"Theme", in.Theme},
 		{"Widget", widget},
 	}
+	if m.offerShare() {
+		share := "no"
+		if in.Share {
+			share = "yes — " + filepath.Join(m.state.ShareRoot, ".termino")
+		}
+		rows = append(rows, [2]string{"Share", share})
+	}
 	lines := make([]string, len(rows))
 	for i, r := range rows {
 		lines[i] = lipgloss.JoinHorizontal(lipgloss.Top, label.Render(r[0]), val.Render(r[1]))
@@ -690,6 +737,11 @@ func (m Model) doneBody(cw int) string {
 		lines = append(lines, ok.Render("✓ Shell widget installed — open a new shell to see it"))
 	} else if m.result.WidgetNote != "" {
 		lines = append(lines, text.Render("  Widget skipped: "+m.result.WidgetNote))
+	}
+	if m.result.ShareRoot != "" {
+		lines = append(lines, ok.Render("✓ Shared through "+filepath.Join(m.result.ShareRoot, ".termino")+" — commit it to share the board"))
+	} else if m.result.ShareNote != "" {
+		lines = append(lines, text.Render("  Sharing skipped: "+m.result.ShareNote))
 	}
 	lines = append(lines, "", text.Render("Next steps:"))
 	for _, s := range setupapp.NextSteps() {

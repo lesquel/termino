@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,8 @@ import (
 	projectdomain "github.com/lesquel/termino/internal/features/project/domain"
 	setupapp "github.com/lesquel/termino/internal/features/setup/application"
 	setuptui "github.com/lesquel/termino/internal/features/setup/presentation/tui"
+	sharedomain "github.com/lesquel/termino/internal/features/share/domain"
+	shareinfra "github.com/lesquel/termino/internal/features/share/infrastructure"
 	"github.com/lesquel/termino/internal/tuikit"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +24,7 @@ import (
 type setupFlags struct {
 	name, project, key, methodology, theme string
 	associate, noAssociate, widget, yes    bool
+	share                                  bool
 	noTUI                                  bool
 	openingBoard                           bool // not a flag: setup runs before the board opens
 }
@@ -50,6 +54,7 @@ func newSetupCmd() *cobra.Command {
 	fl.BoolVar(&f.associate, "associate", false, "Associate the project with the current directory (default for a new project)")
 	fl.BoolVar(&f.noAssociate, "no-associate", false, "Do not associate the current directory (when editing, keeps the existing association)")
 	fl.BoolVar(&f.widget, "widget", false, "Install the shell widget (bash/zsh)")
+	fl.BoolVar(&f.share, "share", false, "Share the board through the git repository of the current directory (see `termino share`)")
 	fl.BoolVarP(&f.yes, "yes", "y", false, "Apply flags and defaults without asking")
 	fl.BoolVar(&f.noTUI, "no-tui", false, "Ask line by line instead of the full-screen wizard")
 	return cmd
@@ -76,7 +81,7 @@ func runSetup(cmd *cobra.Command, f *setupFlags) error {
 		WithMembers(memberUC).
 		WithThemes(availableThemes()).
 		WithOverrides(f.apply)
-	svc := wizard.Service()
+	svc := wizard.Service().WithSharer(setupSharer{})
 	ctx := context.Background()
 
 	if f.yes {
@@ -117,6 +122,9 @@ func (f *setupFlags) apply(in *setupapp.SetupInput) {
 	}
 	if f.widget {
 		in.InstallWidget = true
+	}
+	if f.share {
+		in.Share = true
 	}
 }
 
@@ -210,8 +218,26 @@ func printSetupResult(cmd *cobra.Command, res setupapp.SetupResult) {
 	} else if res.WidgetNote != "" {
 		fmt.Fprintf(out, "  Widget skipped: %s\n", res.WidgetNote)
 	}
+	if res.ShareRoot != "" {
+		fmt.Fprintf(out, "✓ Shared through %s — commit it to share the board.\n", filepath.Join(res.ShareRoot, sharedomain.Dir))
+	} else if res.ShareNote != "" {
+		fmt.Fprintf(out, "  Sharing skipped: %s\n", res.ShareNote)
+	}
 	fmt.Fprintln(out, "Next steps:")
 	for _, s := range setupapp.NextSteps() {
 		fmt.Fprintln(out, "  "+s)
 	}
+}
+
+// setupSharer lets setup share the project like `termino share init`.
+type setupSharer struct{}
+
+func (setupSharer) GitRoot(dir string) (string, error) { return shareinfra.FindGitRoot(dir) }
+
+func (setupSharer) Share(ctx context.Context, projectID, root string) error {
+	svc, err := globalContainer.ShareService()
+	if err != nil {
+		return err
+	}
+	return svc.InitFor(ctx, projectID, root)
 }

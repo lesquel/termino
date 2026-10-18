@@ -17,9 +17,9 @@ It stores data in SQLite and exposes a TUI, MCP server, and CLI.`,
 	// stdout/stderr: that would corrupt the TUI and the MCP stdio protocol.
 	// `--help` does not run this hook, so it still touches no files.
 	// A shared project imports its .termino files before any command runs.
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		fileLogger()
-		syncSharedOnStart(cmd)
+		return syncSharedOnStart(cmd)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Running `termino` with no subcommand opens the TUI.
@@ -53,6 +53,7 @@ func init() {
 		newUninstallCmd(),
 		newDoctorCmd(),
 		newThemeCmd(),
+		newShareCmd(),
 		newVersionCmd(),
 	)
 	// Suppress Cobra's default "Error:" prefix — our commands handle their own output.

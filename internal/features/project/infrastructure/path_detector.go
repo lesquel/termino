@@ -20,8 +20,8 @@ func NewPathDetector(db *sql.DB) *PathDetector {
 	return &PathDetector{db: db}
 }
 
-// DetectForPath returns the project ID whose associated_path is the longest
-// path-segment prefix of fsPath. Returns an empty string (no error) when no
+// DetectForPath returns the project ID whose associated_path or share_root
+// is the longest path-segment prefix of fsPath. Returns an empty string (no error) when no
 // match exists.
 //
 // The match is a true path-prefix, not a raw string prefix: "/home/a" only
@@ -32,13 +32,21 @@ func NewPathDetector(db *sql.DB) *PathDetector {
 func (d *PathDetector) DetectForPath(fsPath string) (string, error) {
 	// Bind fsPath twice: once for the exact match, once for the descendant
 	// match. Rows are ordered longest first so the most-specific path wins.
+	// A shared project also matches every directory inside its share root
+	// (the git root holding .termino/), so a clone picks the shared board; on
+	// an equally long match the share root wins.
 	row := d.db.QueryRow(`
-		SELECT id
-		FROM   projects
-		WHERE  archived_at IS NULL
-		  AND  associated_path IS NOT NULL
-		  AND  (? = rtrim(associated_path, '/') OR ? LIKE (rtrim(associated_path, '/') || '/%'))
-		ORDER  BY length(associated_path) DESC
+		SELECT id FROM (
+			SELECT id, rtrim(associated_path, '/') AS root, 1 AS rank
+			FROM   projects
+			WHERE  archived_at IS NULL AND associated_path IS NOT NULL AND associated_path <> ''
+			UNION ALL
+			SELECT id, rtrim(share_root, '/') AS root, 0 AS rank
+			FROM   projects
+			WHERE  archived_at IS NULL AND share_root <> ''
+		)
+		WHERE  ? = root OR ? LIKE (root || '/%')
+		ORDER  BY length(root) DESC, rank ASC
 		LIMIT  1`, fsPath, fsPath)
 
 	var id string

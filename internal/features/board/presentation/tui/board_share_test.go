@@ -45,3 +45,17 @@ func TestBoardReloadsAfterSharedImport(t *testing.T) {
 		t.Errorf("board did not reload after a shared import:\n%s", ansi.Strip(m.View()))
 	}
 }
+
+func TestBoardStatusLineWarnsAboutSkippedSharedFiles(t *testing.T) {
+	_, uc := fixture(t, baseTasks(), nil)
+	warning := "⚠ 1 shared file skipped — termino share status"
+	svc := boardtui.Services{ShareWarning: func() string { return warning }}
+	m := newProjectModel(t, uc, svc, 120, nil)
+	if lines := plainLines(m.View()); !strings.Contains(lines[1], warning) {
+		t.Errorf("status line = %q, want the share warning", lines[1])
+	}
+	warning = ""
+	if strings.Contains(ansi.Strip(m.View()), "skipped") {
+		t.Error("warning still shown once cleared")
+	}
+}

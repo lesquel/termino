@@ -81,3 +81,27 @@ func (r *ImportStateRepository) LastImport(ctx context.Context, projectID string
 	}
 	return st, rows.Err()
 }
+
+// SetOptOut records (on) or forgets (off) that the project stopped sharing
+// from root.
+func (r *ImportStateRepository) SetOptOut(ctx context.Context, projectID, root string, on bool) error {
+	q := `DELETE FROM share_optouts WHERE project_id = ? AND root = ?`
+	if on {
+		q = `INSERT OR IGNORE INTO share_optouts (project_id, root) VALUES (?, ?)`
+	}
+	if _, err := r.db.ExecContext(ctx, q, projectID, root); err != nil {
+		return fmt.Errorf("share_optouts: %w", err)
+	}
+	return nil
+}
+
+// OptedOut reports whether the project stopped sharing from root.
+func (r *ImportStateRepository) OptedOut(ctx context.Context, projectID, root string) (bool, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM share_optouts WHERE project_id = ? AND root = ?`, projectID, root).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("share_optouts: %w", err)
+	}
+	return n > 0, nil
+}

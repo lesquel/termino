@@ -327,7 +327,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "s" {
 			p, _ := m.project(m.projectID)
-			m.settings = NewSettingsModel(m.theme, m.deps.Config, m.deps.Settings, p.Name, p.Key)
+			m.settings = NewSettingsModel(m.theme, m.deps.Config, m.deps.Settings, p.Name, p.Key).forProject(m.projectID)
 			m.settings, _ = sized(m.settings, m.sizeMsg())
 			m.screen = screenSettings
 			return m, nil

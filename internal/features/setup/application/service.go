@@ -42,6 +42,9 @@ type SetupInput struct {
 	Associate     bool
 	Theme         string // "" means "default"
 	InstallWidget bool
+	// Share shares the project through the git repository of the working
+	// directory. False leaves sharing as it is (`termino share off` stops it).
+	Share bool
 }
 
 // SetupResult reports what Apply did.
@@ -50,6 +53,8 @@ type SetupResult struct {
 	Created         bool   // false when an existing project was updated
 	WidgetInstalled bool   // the widget block is present in the shell rc
 	WidgetNote      string // why the widget was skipped or failed, if it was
+	ShareRoot       string // repository the project is now shared from, if shared
+	ShareNote       string // why sharing was skipped or failed, if it was
 }
 
 // ShellInfo describes the user's shell for the widget step.
@@ -71,6 +76,10 @@ type SetupState struct {
 	DefaultUser     string // $USER
 	Shell           ShellInfo
 	WidgetInstalled bool
+	// ShareRoot is the git root of the working directory when sharing is
+	// available ("" outside a git repository): the wizard then offers to
+	// share the board through it.
+	ShareRoot string
 }
 
 // Defaults returns a prefilled input for mode. ModeEdit falls back to
@@ -95,6 +104,7 @@ func (s SetupState) Defaults(mode Mode) SetupInput {
 			Associate:     s.Cwd != "" && s.Current.AssociatedPath == s.Cwd,
 			Theme:         theme,
 			InstallWidget: s.WidgetInstalled,
+			Share:         s.Current.ShareRoot != "",
 		}
 	}
 	project := DefaultProjectName(s.Cwd)
@@ -117,8 +127,24 @@ type Service struct {
 	members  MemberRegistrar
 	themes   []string
 	registry *setupdomain.InstallationRegistry
+	sharer   Sharer
 	getwd    func() (string, error)
 	getenv   func(string) string
+}
+
+// Sharer shares a project through a git repository (`termino share init`).
+type Sharer interface {
+	// GitRoot returns the git root of dir, or an error outside a repository.
+	GitRoot(dir string) (string, error)
+	// Share starts sharing the project from root.
+	Share(ctx context.Context, projectID, root string) error
+}
+
+// WithSharer makes setup offer to share the project through the git
+// repository of the working directory.
+func (s *Service) WithSharer(sh Sharer) *Service {
+	s.sharer = sh
+	return s
 }
 
 // NewService constructs a Service.
@@ -163,6 +189,11 @@ func (s *Service) State(ctx context.Context) (SetupState, error) {
 	}
 	if wd, err := s.getwd(); err == nil && wd != "" {
 		st.Cwd = filepath.Clean(wd)
+	}
+	if s.sharer != nil && st.Cwd != "" {
+		if root, err := s.sharer.GitRoot(st.Cwd); err == nil {
+			st.ShareRoot = root
+		}
 	}
 	projects, err := s.projects.ListProjects(ctx)
 	if err != nil {
@@ -278,7 +309,30 @@ func (s *Service) Apply(ctx context.Context, in SetupInput) (SetupResult, error)
 			}
 		}
 	}
+	if in.Share {
+		s.share(ctx, cwd, &res)
+	}
 	return res, nil
+}
+
+// share shares the applied project through the git repository of cwd,
+// noting (not failing) when that is not possible: the rest of the setup is
+// already written.
+func (s *Service) share(ctx context.Context, cwd string, res *SetupResult) {
+	if s.sharer == nil {
+		res.ShareNote = "sharing is not available here"
+		return
+	}
+	root, err := s.sharer.GitRoot(cwd)
+	if err != nil {
+		res.ShareNote = "not inside a git repository — run `termino share init` from your repository"
+		return
+	}
+	if err := s.sharer.Share(ctx, res.Project.ID, root); err != nil {
+		res.ShareNote = "sharing failed: " + err.Error()
+		return
+	}
+	res.ShareRoot = root
 }
 
 // validate normalizes in and checks every field, returning all problems at

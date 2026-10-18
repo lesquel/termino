@@ -126,8 +126,8 @@ and settings open as dialogs centered over the board, which stays visible
 around them. Dialogs that do not fit the terminal scroll (`↑`/`↓`); with
 `NO_COLOR` they are drawn with a border and plain text only.
 
-Settings (`s`) changes three things without leaving the board, each saved to
-`config.toml` and confirmed on a status line (`✓ Theme set to nord`):
+Settings (`s`) changes four things without leaving the board, confirmed on a
+status line (`✓ Theme set to nord`):
 
 - **Theme** — the list previews the highlighted theme; `enter` applies it to
   the running board at once.
@@ -136,6 +136,9 @@ Settings (`s`) changes three things without leaving the board, each saved to
   install`/`uninstall` (fish is not supported yet).
 - **Motion** — turns the Done celebration on or off (always off while
   `NO_COLOR` is set).
+- **Share via repo** — shares the current project through the git
+  repository of the working directory, or stops sharing it, like `termino
+  share init`/`off` (see [Sharing with your team](#sharing-with-your-team)).
 
 `↑`/`↓` move, `esc` goes back; other keys (`q`, `p`, `?`) do nothing while
 settings is open.
@@ -179,6 +182,38 @@ narrower than 60 columns get a three-line version. Colors follow `NO_COLOR`
 and are dropped when the output is not a terminal. The summary is read-only
 and gives up silently after 100 ms.
 
+### Sharing with your team
+
+Share a board through the git repository you already use; there is no
+server and no account. Termino keeps plain-text files under `.termino/`
+(`project.toml` plus one TOML file per task) in sync with the board, and git
+carries them between people. Termino never commits, pushes or pulls.
+
+```sh
+cd my-repo
+termino share init              # writes .termino/ at the git root
+git add .termino && git commit -m "chore: share the termino board" && git push
+```
+
+Every change you make (TUI, CLI or an agent over MCP) rewrites the affected
+files. Teammates clone or pull the repository and run `termino`: the board is
+created (or their existing project with the same key is linked and merged by
+task) and every command, the open board and the MCP server pick up the files
+git brought in. Comments and activity history stay local.
+
+- **Conflicts**: edits to different tasks never conflict (one file per
+  task). If two people edit the same task, git reports a conflict in that
+  file; until you resolve it the file is skipped, the board's status line
+  warns `⚠ 1 shared file skipped — termino share status`, and everything else
+  keeps working. Two tasks created at once with the same number are
+  renumbered the same way on every machine (the later one moves).
+- `termino share status` shows the repository, the file count, the last
+  import and any skipped file with the reason.
+- `termino share off` stops syncing; the files stay in the repository.
+- The settings screen (`s` on the board) has the same on/off toggle, and
+  `termino setup` offers it inside a git repository (`--share` without a
+  terminal).
+
 ## CLI reference
 
 Run `termino <command> --help` for full flags.
@@ -187,7 +222,7 @@ Run `termino <command> --help` for full flags.
 |---|---|
 | `termino` | Open the TUI |
 | `termino board` | Open the Kanban board (TUI) |
-| `termino setup [--name --project --key --methodology --theme --associate\|--no-associate --widget --yes --no-tui]` | Setup wizard; re-run to edit the current setup or add a project (see [Setup](#setup)) |
+| `termino setup [--name --project --key --methodology --theme --associate\|--no-associate --widget --share --yes --no-tui]` | Setup wizard; re-run to edit the current setup or add a project (see [Setup](#setup)) |
 | `termino project new [--name --key --methodology kanban\|scrum --path --associate-pwd]` | Create a project |
 | `termino project list` | List projects (current marked `*`) |
 | `termino project use <key>` | Make a project the current one |
@@ -206,6 +241,7 @@ Run `termino <command> --help` for full flags.
 | `termino widget install [--shell bash\|zsh]` / `uninstall` | Add/remove the widget block in `~/.bashrc` or `~/.zshrc` |
 | `termino connect <agent>` / `termino disconnect <agent>` | Connect/disconnect an agent integration (`kiro`) |
 | `termino mcp [--actor --read-only]` | Run the MCP server on stdio |
+| `termino share init` / `status` / `off` | Share the current project through the git repository (see [Sharing with your team](#sharing-with-your-team)) |
 | `termino theme [name]` | List themes (current marked `*`), or set one: `default`, `spooky`, `dracula`, `nord`, `gruvbox`, `catppuccin-mocha`, `tokyo-night`, `solarized-light` (for light terminals), `high-contrast` (monochrome, ASCII priority symbols), or your own |
 | `termino doctor` | Diagnose the installation |
 | `termino uninstall [--purge]` | Remove integrations; `--purge` also deletes data and config |

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	connectordomain "github.com/lesquel/termino/internal/features/connector/domain"
@@ -140,6 +141,11 @@ func (w *SetupWizard) Run(ctx context.Context) error {
 	} else if res.WidgetNote != "" {
 		fmt.Fprintf(w.out, "  Widget skipped: %s\n", res.WidgetNote)
 	}
+	if res.ShareRoot != "" {
+		fmt.Fprintf(w.out, "✓ Shared through %s — commit it to share the board.\n", filepath.Join(res.ShareRoot, ".termino"))
+	} else if res.ShareNote != "" {
+		fmt.Fprintf(w.out, "  Sharing skipped: %s\n", res.ShareNote)
+	}
 
 	w.offerConnectors(p)
 
@@ -258,6 +264,12 @@ func (w *SetupWizard) collect(ctx context.Context, p *prompter, st SetupState, i
 		in.InstallWidget = false
 	} else if in.InstallWidget, err = p.askYesNo(fmt.Sprintf("Install shell widget in %s (status on new shells)", st.Shell.Name), in.InstallWidget); err != nil {
 		return err
+	}
+	if st.ShareRoot != "" {
+		label := fmt.Sprintf("Share this board with the repo (%s)", filepath.Join(st.ShareRoot, ".termino"))
+		if in.Share, err = p.askYesNo(label, in.Share); err != nil {
+			return err
+		}
 	}
 	_ = ctx
 	return nil

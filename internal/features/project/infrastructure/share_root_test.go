@@ -39,3 +39,28 @@ func TestProjectRepository_ShareRootRoundTrip(t *testing.T) {
 		t.Errorf("ShareRoot not cleared: %q", got.ShareRoot)
 	}
 }
+
+// A shared project is picked for any directory inside its share root, even
+// when its associated path points elsewhere.
+func TestPathDetector_MatchesShareRoot(t *testing.T) {
+	db := openTestDB(t)
+	repo := projectinfra.NewProjectRepository(db)
+	detector := projectinfra.NewPathDetector(db)
+	ctx := context.Background()
+	for _, p := range []projectdomain.Project{
+		{ID: "other", Key: "OTH", Name: "Other", Methodology: projectdomain.MethodologyKanban, AssociatedPath: "/work"},
+		{ID: "tie", Key: "TIE", Name: "Tie", Methodology: projectdomain.MethodologyKanban, AssociatedPath: "/work/repo"},
+		{ID: "shared", Key: "SHR", Name: "Shared", Methodology: projectdomain.MethodologyKanban, AssociatedPath: "/elsewhere", ShareRoot: "/work/repo"},
+	} {
+		p.CreatedAt = time.Now().UTC().Truncate(time.Second)
+		if err := repo.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, want := range map[string]string{"/work/repo/src": "shared", "/work/repo": "shared", "/work/other": "other", "/elsewhere/x": "shared"} {
+		got, err := detector.DetectForPath(path)
+		if err != nil || got != want {
+			t.Errorf("DetectForPath(%s) = %q, %v; want %q", path, got, err, want)
+		}
+	}
+}

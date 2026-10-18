@@ -127,6 +127,7 @@ func settingsDeps() apptui.SettingsDeps {
 	return apptui.SettingsDeps{
 		Themes: availableThemes(),
 		Widget: setupapp.NewShellWidget(registry, os.Getenv("SHELL"), home),
+		Share:  shareToggler{},
 		Home:   home,
 	}
 }

@@ -39,6 +39,9 @@ type TaskStore interface {
 type ImportState interface {
 	RecordImport(ctx context.Context, projectID string, at time.Time, skipped []domain.Skipped) error
 	LastImport(ctx context.Context, projectID string) (domain.ImportStatus, error)
+	// SetOptOut records or forgets that a project stopped sharing from root.
+	SetOptOut(ctx context.Context, projectID, root string, on bool) error
+	OptedOut(ctx context.Context, projectID, root string) (bool, error)
 }
 
 // FileStore reads and writes shared files by absolute path.
@@ -110,6 +113,11 @@ func (s *ShareService) Init(ctx context.Context, projectID, root string) error {
 	}
 	if err := s.d.Projects.Save(ctx, p); err != nil {
 		return fmt.Errorf("save project: %w", err)
+	}
+	if s.d.State != nil {
+		if err := s.d.State.SetOptOut(ctx, projectID, root, false); err != nil {
+			return err
+		}
 	}
 	return s.ExportAll(ctx, projectID)
 }
