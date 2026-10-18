@@ -31,14 +31,66 @@ func NewTaskRepository(db *sql.DB) *TaskRepository {
 func (r *TaskRepository) Save(ctx context.Context, t taskdomain.Task) error {
 	now := time.Now().UTC()
 	t.CreatedAt, t.UpdatedAt = now, now
-	return r.upsert(ctx, t, false)
+	return r.upsert(ctx, r.db, t, false)
 }
 
 // SaveImported inserts or updates a Task row keeping the given CreatedAt,
 // UpdatedAt, UpdatedBy and Number, so a task read from a shared file is stored
 // exactly as exported. Used by repository-sharing import only.
 func (r *TaskRepository) SaveImported(ctx context.Context, t taskdomain.Task) error {
-	return r.upsert(ctx, t, true)
+	return r.upsert(ctx, r.db, t, true)
+}
+
+// ApplyImported stores tasks read from shared files (keeping their given
+// timestamps and numbers, like SaveImported) and gives the tasks in renumber
+// their new numbers, all in one transaction. Every task whose number changes
+// first parks on a unique negative number, so the swaps and duplicate-number
+// resolutions of one import never trip UNIQUE(project_id, number) midway.
+// The final numbers must be unique within the project.
+func (r *TaskRepository) ApplyImported(ctx context.Context, renumber map[string]int, tasks []taskdomain.Task) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("task.ApplyImported begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	final := make(map[string]int, len(renumber)+len(tasks))
+	for id, n := range renumber {
+		final[id] = n
+	}
+	for _, t := range tasks {
+		final[t.ID] = t.Number
+	}
+	ids := make([]string, 0, len(final))
+	for id := range final {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tasks SET number = ? WHERE id = ? AND number <> ?`, -final[id], id, final[id]); err != nil {
+			return fmt.Errorf("task.ApplyImported park: %w", mapUniqueNumber(err))
+		}
+	}
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tasks SET number = ? WHERE id = ? AND number = ?`, final[id], id, -final[id]); err != nil {
+			return fmt.Errorf("task.Renumber: %w", mapUniqueNumber(err))
+		}
+	}
+	for _, t := range tasks {
+		if err := r.upsert(ctx, tx, t, true); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("task.ApplyImported commit: %w", err)
+	}
+	return nil
+}
+
+// execer is satisfied by *sql.DB and *sql.Tx.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // Renumber changes the project-scoped number of a task without touching its
@@ -55,7 +107,7 @@ func (r *TaskRepository) Renumber(ctx context.Context, id string, number int) er
 // upsert writes t. With keep false only updated_at is refreshed on conflict
 // (created_at and number stay as first stored); with keep true every given
 // value, including created_at and number, overwrites the stored row.
-func (r *TaskRepository) upsert(ctx context.Context, t taskdomain.Task, keep bool) error {
+func (r *TaskRepository) upsert(ctx context.Context, db execer, t taskdomain.Task, keep bool) error {
 	var deletedAt *string
 	if t.DeletedAt != nil {
 		s := t.DeletedAt.UTC().Format(time.RFC3339)
@@ -97,7 +149,7 @@ func (r *TaskRepository) upsert(ctx context.Context, t taskdomain.Task, keep boo
 			number      = excluded.number,
 			created_at  = excluded.created_at,`
 	}
-	_, err := r.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO tasks
 			(id, project_id, number, title, description, column_id, sprint_id,
 			 priority, assignee_id, due_date, points, position, deleted_at,
@@ -529,6 +581,29 @@ func (r *LabelRepository) Attach(ctx context.Context, taskID, labelID string) er
 		INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`, taskID, labelID)
 	if err != nil {
 		return fmt.Errorf("label.Attach: %w", err)
+	}
+	return nil
+}
+
+// SetTaskLabels makes labelIDs the exact set of labels attached to the task,
+// detaching any other. Used by repository-sharing import only.
+func (r *LabelRepository) SetTaskLabels(ctx context.Context, taskID string, labelIDs []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("label.SetTaskLabels begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_labels WHERE task_id = ?`, taskID); err != nil {
+		return fmt.Errorf("label.SetTaskLabels clear: %w", err)
+	}
+	for _, id := range labelIDs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)`, taskID, id); err != nil {
+			return fmt.Errorf("label.SetTaskLabels attach: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("label.SetTaskLabels commit: %w", err)
 	}
 	return nil
 }

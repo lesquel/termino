@@ -20,9 +20,25 @@ import (
 	taskdomain "github.com/lesquel/termino/internal/features/task/domain"
 )
 
-// LabelLister lists a project's labels.
-type LabelLister interface {
+// LabelStore lists a project's labels and, for import, creates labels and
+// sets the exact labels of a task.
+type LabelStore interface {
 	ListByProject(ctx context.Context, projectID string) ([]taskdomain.Label, error)
+	Save(ctx context.Context, l taskdomain.Label) error
+	SetTaskLabels(ctx context.Context, taskID string, labelIDs []string) error
+}
+
+// TaskStore is the task repository plus the import-only write that keeps
+// the timestamps and numbers read from shared files.
+type TaskStore interface {
+	taskdomain.TaskRepository
+	ApplyImported(ctx context.Context, renumber map[string]int, tasks []taskdomain.Task) error
+}
+
+// ImportState records the outcome of the last import of each project.
+type ImportState interface {
+	RecordImport(ctx context.Context, projectID string, at time.Time, skipped []domain.Skipped) error
+	LastImport(ctx context.Context, projectID string) (domain.ImportStatus, error)
 }
 
 // FileStore reads and writes shared files by absolute path.
@@ -55,13 +71,16 @@ type Codec interface {
 type Deps struct {
 	Projects projectdomain.ProjectRepository
 	Board    boarddomain.BoardRepository
-	Tasks    taskdomain.TaskRepository
+	Tasks    TaskStore
 	Members  memberdomain.MemberRepository
-	Labels   LabelLister
+	Labels   LabelStore
 	Sprints  sprintdomain.SprintRepository
 	Files    FileStore
 	Hashes   HashStore
 	Codec    Codec
+	State    ImportState
+	// Now returns the current time; nil uses time.Now.
+	Now func() time.Time
 	// Logger returns the logger for export failures; it is resolved lazily so
 	// the log file is only opened when something goes wrong. nil discards.
 	Logger func() *slog.Logger

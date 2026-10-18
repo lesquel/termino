@@ -47,4 +47,11 @@ type Services struct {
 	// OnDone, when set, runs after a task was moved into the Done column
 	// (e.g. to check the matching checkbox in its source file).
 	OnDone func(taskID string)
+	// ShareVersion, when set, returns a counter that increases after every
+	// import of the project's shared files; a change reloads the board (the
+	// data_version poll misses writes made on the board's own connection).
+	ShareVersion func() int64
+	// ShareWarning, when set, returns a warning shown in the status line
+	// (e.g. shared files skipped by the last import), or "".
+	ShareWarning func() string
 }

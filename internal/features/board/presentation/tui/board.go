@@ -48,9 +48,10 @@ type BoardLoadedMsg struct {
 // Re-exported here as an alias from tuikit.
 type RefreshMsg = tuikit.RefreshMsg
 
-// dataVersionMsg carries the current SQLite data_version.
+// dataVersionMsg carries the current SQLite data_version and share version.
 type dataVersionMsg struct {
 	version int
+	share   int64
 	err     error
 }
 
@@ -115,6 +116,7 @@ type BoardModel struct {
 	height    int
 	ready     bool
 	dataVer   int
+	shareVer  int64
 
 	mode        mode
 	target      taskdomain.Task // task the open picker/confirmation acts on
@@ -286,7 +288,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status, m.statusErr = "", false
 		}
 		return m, tea.Batch(
-			checkDataVersion(m.db, m.dataVer),
+			checkDataVersion(m.db, m.dataVer, m.svc.ShareVersion),
 			tickPoll(),
 		)
 
@@ -294,8 +296,8 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, nil
 		}
-		if msg.version != m.dataVer {
-			m.dataVer = msg.version
+		if msg.version != m.dataVer || msg.share != m.shareVer {
+			m.dataVer, m.shareVer = msg.version, msg.share
 			return m, m.Reload()
 		}
 
@@ -1111,16 +1113,22 @@ func (m BoardModel) renderCard(c card, selected bool, width int) string {
 	return out
 }
 
-// checkDataVersion queries PRAGMA data_version on the DB and compares with last.
-func checkDataVersion(db *sql.DB, lastVersion int) tea.Cmd {
+// checkDataVersion queries PRAGMA data_version on the DB and the share
+// version (when shareVersion is set) so the board can compare them with the
+// last ones it saw.
+func checkDataVersion(db *sql.DB, lastVersion int, shareVersion func() int64) tea.Cmd {
 	return func() tea.Msg {
+		var share int64
+		if shareVersion != nil {
+			share = shareVersion()
+		}
 		if db == nil {
-			return dataVersionMsg{version: lastVersion}
+			return dataVersionMsg{version: lastVersion, share: share}
 		}
 		var version int
 		if err := db.QueryRow("PRAGMA data_version").Scan(&version); err != nil {
 			return dataVersionMsg{version: lastVersion, err: err}
 		}
-		return dataVersionMsg{version: version}
+		return dataVersionMsg{version: version, share: share}
 	}
 }

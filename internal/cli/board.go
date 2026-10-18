@@ -90,6 +90,8 @@ func startTUI(cmd *cobra.Command) error {
 			watchDone = done
 		}
 	}
+	// Shared projects re-import their .termino files when they change.
+	share, shareDone := watchShared(ctx, cfg.CurrentProjectID)
 	onDone := func(taskID string) {
 		if err := syncSvc.ExportTask(ctx, taskID, sources); err != nil {
 			logger.Warn("tui: export to task source failed", "task", taskID, "err", err)
@@ -107,10 +109,12 @@ func startTUI(cmd *cobra.Command) error {
 		Theme:      theme,
 		OnTaskDone: onDone,
 		Settings:   settingsDeps(),
+		Share:      apptui.ShareDeps{Version: share.Version, Warning: share.Warning},
 	}
 	runErr := apptui.Start(deps)
 	cancel()
 	<-watchDone
+	<-shareDone
 	return runErr
 }
 

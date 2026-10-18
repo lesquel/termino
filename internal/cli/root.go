@@ -16,8 +16,10 @@ It stores data in SQLite and exposes a TUI, MCP server, and CLI.`,
 	// Every command logs to $XDG_STATE_HOME/termino/termino.log, never to
 	// stdout/stderr: that would corrupt the TUI and the MCP stdio protocol.
 	// `--help` does not run this hook, so it still touches no files.
+	// A shared project imports its .termino files before any command runs.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		fileLogger()
+		syncSharedOnStart(cmd)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Running `termino` with no subcommand opens the TUI.

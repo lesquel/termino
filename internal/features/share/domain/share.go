@@ -119,3 +119,17 @@ func ContentHash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+// Skipped is a shared file an import could not apply, with the reason
+// (conflict markers, invalid TOML, a newer format version...). It stays
+// skipped until the file changes and decodes.
+type Skipped struct {
+	Path   string // relative to Dir
+	Reason string
+}
+
+// ImportStatus is the outcome of the last import of a shared project.
+type ImportStatus struct {
+	At      time.Time // zero when the project was never imported
+	Skipped []Skipped
+}

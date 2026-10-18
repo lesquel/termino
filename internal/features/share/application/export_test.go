@@ -51,6 +51,23 @@ type fixture struct {
 	sprints  *sprintapp.SprintUseCases
 	memberDB memberdomain.MemberRepository
 	project  projectdomain.Project
+	files    *countingStore
+}
+
+// countingStore counts the writes and removals that reach the filesystem.
+type countingStore struct {
+	shareinfra.FileStore
+	writes int
+}
+
+func (c *countingStore) Write(path string, data []byte) error {
+	c.writes++
+	return c.FileStore.Write(path, data)
+}
+
+func (c *countingStore) Remove(path string) error {
+	c.writes++
+	return c.FileStore.Remove(path)
 }
 
 func newFixture(t *testing.T, shared bool) *fixture {
@@ -64,6 +81,7 @@ func newFixture(t *testing.T, shared bool) *fixture {
 	logger := slog.New(slog.NewTextHandler(logs, nil))
 
 	labelRepo := taskinfra.NewLabelRepository(db)
+	files := &countingStore{}
 	svc := shareapp.NewShareService(shareapp.Deps{
 		Projects: projectinfra.NewProjectRepository(db),
 		Board:    boardinfra.NewBoardRepository(db),
@@ -71,9 +89,10 @@ func newFixture(t *testing.T, shared bool) *fixture {
 		Members:  memberinfra.NewMemberRepository(db),
 		Labels:   labelRepo,
 		Sprints:  sprintinfra.NewSprintRepository(db),
-		Files:    shareinfra.FileStore{},
+		Files:    files,
 		Hashes:   shareinfra.NewHashRepository(db),
 		Codec:    shareinfra.TOMLCodec{},
+		State:    shareinfra.NewImportStateRepository(db),
 		Logger:   func() *slog.Logger { return logger },
 	})
 	// The actor must exist: activity rows reference members(id).
@@ -82,7 +101,7 @@ func newFixture(t *testing.T, shared bool) *fixture {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{t: t, ctx: context.Background(), db: db, root: t.TempDir(), svc: svc, logs: logs}
+	f := &fixture{t: t, ctx: context.Background(), db: db, root: t.TempDir(), svc: svc, logs: logs, files: files}
 	taskRepo := svc.Tasks(taskinfra.NewTaskRepository(db))
 	boardRepo := svc.Board(boardinfra.NewBoardRepository(db))
 	f.projects = projectapp.NewProjectUseCases(svc.Projects(projectinfra.NewProjectRepository(db)), boardRepo, events.NewBus())

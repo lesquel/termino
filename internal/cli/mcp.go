@@ -65,8 +65,17 @@ func newMCPCmd() *cobra.Command {
 				},
 			}
 
+			// Keep importing teammates' shared files while the server runs.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			projectID, _ := currentProjectID()
+			_, watchDone := watchShared(ctx, projectID)
+
 			s := appmcp.NewServer(deps)
-			return appmcp.Serve(s, logging.Logger)
+			err = appmcp.Serve(s, logging.Logger)
+			cancel()
+			<-watchDone
+			return err
 		},
 	}
 

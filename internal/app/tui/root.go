@@ -48,6 +48,16 @@ type RootDeps struct {
 	OnTaskDone func(taskID string)
 	// Settings feeds the settings screen (key s on the board).
 	Settings SettingsDeps
+	// Share connects the board to repository sharing.
+	Share ShareDeps
+}
+
+// ShareDeps connects the board to repository sharing; nil fields disable it.
+type ShareDeps struct {
+	// Version increases after every import of the shared files.
+	Version func() int64
+	// Warning returns the status-line warning for skipped shared files.
+	Warning func() string
 }
 
 // RootModel is the top-level Bubble Tea model.
@@ -139,6 +149,9 @@ func (m RootModel) boardServices() boardtui.Services {
 		Actor:  m.actor,
 		Motion: m.deps.Config.MotionEnabled(),
 		OnDone: m.deps.OnTaskDone,
+
+		ShareVersion: m.deps.Share.Version,
+		ShareWarning: m.deps.Share.Warning,
 	}
 	if m.deps.TaskUC != nil {
 		svc.Tasks = m.deps.TaskUC

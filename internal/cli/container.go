@@ -222,6 +222,7 @@ func (c *Container) shareServiceLocked(db *sql.DB) *shareapp.ShareService {
 			Files:    shareinfra.FileStore{},
 			Hashes:   shareinfra.NewHashRepository(db),
 			Codec:    shareinfra.TOMLCodec{},
+			State:    shareinfra.NewImportStateRepository(db),
 			Logger:   fileLogger,
 		})
 	}

@@ -26,13 +26,7 @@ func (s *ShareService) after(ctx context.Context, writeErr error, op string, exp
 		return writeErr
 	}
 	if err := export(); err != nil {
-		logger := slog.New(slog.DiscardHandler)
-		if s.d.Logger != nil {
-			if l := s.d.Logger(); l != nil {
-				logger = l
-			}
-		}
-		logger.LogAttrs(ctx, slog.LevelWarn, "share export failed", slog.String("op", op), slog.String("error", err.Error()))
+		s.logger().LogAttrs(ctx, slog.LevelWarn, "share export failed", slog.String("op", op), slog.String("error", err.Error()))
 	}
 	return nil
 }
